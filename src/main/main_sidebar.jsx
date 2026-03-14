@@ -6,7 +6,9 @@ import IconBtn from '@/elements/IconBtn'
 import MainPanel from '@/elements/mainPanel'
 import SettingsPage from '@/elements/settingPanel'
 import { useGetChatsQuery } from '@/store/api'
+import { realtimeActions } from '@/store/realtimeSlice'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDispatch } from 'react-redux'
 import { useNavigate, useParams } from 'react-router-dom'
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -20,9 +22,10 @@ export default function TelegramLayout({
 	isDark,
 	setIsDark,
 }) {
+	const dispatch = useDispatch()
 	const navigate = useNavigate()
 	const { chatId } = useParams()
-	const { data: chatConversations = [] } = useGetChatsQuery()
+	const { data: chatConversations = [] } = useGetChatsQuery('all')
 	const meId = me?._id
 	const convLoading = false
 	const meLoading = false
@@ -82,6 +85,13 @@ export default function TelegramLayout({
 			window.removeEventListener('mouseup', onUp)
 		}
 	}, [])
+
+	useEffect(() => {
+		dispatch(realtimeActions.realtimeInit())
+		return () => {
+			dispatch(realtimeActions.realtimeShutdown())
+		}
+	}, [dispatch])
 
 	useEffect(() => {
 		if (typeof isDark === 'boolean') {

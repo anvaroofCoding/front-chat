@@ -1,23 +1,20 @@
 import {
+	api,
 	useGetMeQuery,
 	useGetMessagesQuery,
+	useMarkConversationReadMutation,
+	useMarkMessageReadMutation,
 	useSendMessageMutation,
 } from '@/store/api'
+import { realtimeActions } from '@/store/realtimeSlice'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { useParams } from 'react-router-dom'
-import { io } from 'socket.io-client'
 import { getColor } from './helpers'
 import { MsgMedia } from './MediaViewer'
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || ''
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
-const TYPING_IDLE_MS = 800
-
-const socket = io(SOCKET_URL, {
-	autoConnect: true,
-	auth: { token: localStorage.getItem('token') || '' },
-})
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
 const truncate = (s = '', n = 60) => (s.length > n ? s.slice(0, n) + '…' : s)
@@ -102,15 +99,6 @@ function getMessageId(msg) {
 	return msg?._id || msg?.id || msg?.messageId || null
 }
 
-function getMessageConversationId(msg) {
-	return normalizeId(
-		msg?.conversationId ||
-			msg?.conversation?._id ||
-			msg?.conversation ||
-			msg?.chatId,
-	)
-}
-
 function normalizeId(id) {
 	if (!id) return ''
 	if (typeof id === 'string') return id
@@ -121,60 +109,37 @@ function normalizeId(id) {
 	return ''
 }
 
-function getTypingConversationId(payload) {
-	return normalizeId(
-		payload?.conversationId ||
-			payload?.conversation?._id ||
-			payload?.conversation ||
-			payload?.chatId ||
-			payload?.roomId ||
-			payload?.groupId,
-	)
-}
+function updateConversationLastMessage(dispatch, message, conversationId) {
+	if (!conversationId || !message) return
 
-function getTypingUserId(payload) {
-	return normalizeId(
-		payload?.userId ||
-			payload?.senderId ||
-			payload?.typingUserId ||
-			payload?.memberId ||
-			payload?.user?._id ||
-			payload?.user?.id ||
-			payload?.sender?._id ||
-			payload?.sender?.id,
-	)
-}
+	const convId = normalizeId(conversationId)
+	if (!convId) return
 
-function getTypingName(payload) {
-	const first =
-		payload?.firstname ||
-		payload?.firstName ||
-		payload?.name ||
-		payload?.user?.firstname ||
-		payload?.user?.firstName ||
-		payload?.user?.name ||
-		''
-	const last =
-		payload?.lastname ||
-		payload?.lastName ||
-		payload?.user?.lastname ||
-		payload?.user?.lastName ||
-		''
-	const full = `${first} ${last}`.trim()
-	return full || 'Foydalanuvchi'
-}
+	const update = draft => {
+		if (!Array.isArray(draft)) return
+		const index = draft.findIndex(
+			conversation => normalizeId(conversation?._id) === convId,
+		)
+		if (index < 0) return
 
-function formatTypingText(users = [], isGroup = false) {
-	if (!users.length) return ''
-	if (!isGroup) return `${users[0].name} yozmoqda...`
-	if (users.length === 1) return `${users[0].name} yozmoqda...`
-	return `${users.length} kishi yozmoqda...`
-}
+		draft[index].lastMessage = message
+		draft[index].lastMessageAt =
+			message?.createdAt || draft[index].lastMessageAt
+		draft[index].updatedAt = message?.createdAt || draft[index].updatedAt
 
-function normalizeTypingPayload(raw) {
-	if (!raw) return null
-	if (Array.isArray(raw)) return raw[0] || null
-	return raw.payload || raw.data || raw.detail || raw.body || raw
+		if (index > 0) {
+			const [item] = draft.splice(index, 1)
+			draft.unshift(item)
+		}
+	}
+
+	;[undefined, 'all', 'private', 'group'].forEach(arg => {
+		dispatch(
+			api.util.updateQueryData('getChats', arg, draft => {
+				update(draft)
+			}),
+		)
+	})
 }
 
 function mergeUniqueMessages(current = [], incoming = []) {
@@ -209,6 +174,49 @@ function getReplySnippet(msg) {
 	if (msg.video?.length) return 'Video'
 	if (msg.audio) return 'Ovozli xabar'
 	return '...'
+}
+
+function getTypingName(entry) {
+	if (!entry) return 'Kimdir'
+	const name = String(entry.name || '').trim()
+	if (!name) return 'Kimdir'
+	return name
+}
+
+function buildTypingLabel(typingMap, isGroup) {
+	const now = Date.now()
+	const activeUsers = Object.values(typingMap || {}).filter(
+		user => now - (user?.lastAt || 0) < 5000,
+	)
+
+	if (!activeUsers.length) {
+		return { hasTyping: false, label: '' }
+	}
+
+	const uniqueNames = []
+	for (const user of activeUsers) {
+		const name = getTypingName(user)
+		if (!uniqueNames.includes(name)) {
+			uniqueNames.push(name)
+		}
+	}
+
+	if (!isGroup || uniqueNames.length === 1) {
+		return { hasTyping: true, label: `${uniqueNames[0]} yozmoqda...` }
+	}
+
+	if (uniqueNames.length === 2) {
+		return {
+			hasTyping: true,
+			label: `${uniqueNames[0]}, ${uniqueNames[1]} yozmoqda...`,
+		}
+	}
+
+	const extraCount = uniqueNames.length - 2
+	return {
+		hasTyping: true,
+		label: `${uniqueNames[0]}, ${uniqueNames[1]} va yana ${extraCount} kishi yozmoqda...`,
+	}
 }
 
 // ─── SKELETONS ────────────────────────────────────────────────────────────────
@@ -671,15 +679,17 @@ const MsgBubble = memo(
 							strokeLinecap='round'
 							strokeLinejoin='round'
 						/>
-						<path
-							d='M9 6.5l4.5 4.5'
-							stroke={
-								overlay ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,.85)'
-							}
-							strokeWidth='1.7'
-							strokeLinecap='round'
-							strokeLinejoin='round'
-						/>
+						{(msg?.is_read || msg?.read) && (
+							<path
+								d='M9 6.5l4.5 4.5'
+								stroke={
+									overlay ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,.85)'
+								}
+								strokeWidth='1.7'
+								strokeLinecap='round'
+								strokeLinejoin='round'
+							/>
+						)}
 					</svg>
 				)}
 			</div>
@@ -1234,16 +1244,27 @@ function InputBar({
 	replyTo,
 	replyName,
 	onCancelReply,
-	onTypingStart,
-	onTypingStop,
 	onMessageSent,
 }) {
 	const [text, setText] = useState('')
 	const [attach, setAttach] = useState(false)
 	const [voice, setVoice] = useState(false)
 	const [sending, setSending] = useState(false)
+	const dispatch = useDispatch()
 	const taRef = useRef(null)
+	const typingTimeoutRef = useRef(null)
+	const isTypingRef = useRef(false)
 	const hasText = text.trim().length > 0
+
+	const focusInput = useCallback(() => {
+		requestAnimationFrame(() => {
+			const el = taRef.current
+			if (!el || voice || sending) return
+			el.focus()
+			const valueLength = el.value?.length ?? 0
+			el.setSelectionRange(valueLength, valueLength)
+		})
+	}, [voice, sending])
 
 	// RTK mutation
 	const [sendMessage] = useSendMessageMutation()
@@ -1254,6 +1275,53 @@ function InputBar({
 		el.style.height = 'auto'
 		el.style.height = Math.min(el.scrollHeight, 120) + 'px'
 	}, [text])
+
+	useEffect(() => {
+		focusInput()
+	}, [convId, focusInput])
+
+	const notifyTyping = useCallback(() => {
+		if (!convId) return
+		if (!isTypingRef.current) {
+			dispatch(
+				realtimeActions.sendTyping({
+					conversationId: convId,
+					isTyping: true,
+				}),
+			)
+			isTypingRef.current = true
+		}
+		if (typingTimeoutRef.current) {
+			clearTimeout(typingTimeoutRef.current)
+		}
+		typingTimeoutRef.current = setTimeout(() => {
+			if (!convId) return
+			dispatch(
+				realtimeActions.sendTyping({
+					conversationId: convId,
+					isTyping: false,
+				}),
+			)
+			isTypingRef.current = false
+			typingTimeoutRef.current = null
+		}, 2500)
+	}, [convId, dispatch])
+
+	useEffect(() => {
+		return () => {
+			if (typingTimeoutRef.current) {
+				clearTimeout(typingTimeoutRef.current)
+			}
+			if (isTypingRef.current && convId) {
+				dispatch(
+					realtimeActions.sendTyping({
+						conversationId: convId,
+						isTyping: false,
+					}),
+				)
+			}
+		}
+	}, [convId, dispatch])
 
 	// ── Universal FormData builder ─────────────────────────────────────────
 	const buildForm = useCallback(
@@ -1291,9 +1359,18 @@ function InputBar({
 			const fd = buildForm({ text: t })
 			const response = await sendMessage(fd).unwrap()
 			onMessageSent?.(response)
-			onTypingStop?.()
 			setText('')
 			onCancelReply?.()
+			focusInput()
+			if (isTypingRef.current) {
+				dispatch(
+					realtimeActions.sendTyping({
+						conversationId: convId,
+						isTyping: false,
+					}),
+				)
+				isTypingRef.current = false
+			}
 		} catch (err) {
 			console.error('Send error:', err)
 		} finally {
@@ -1304,9 +1381,10 @@ function InputBar({
 		sending,
 		convId,
 		buildForm,
+		focusInput,
 		onCancelReply,
-		onTypingStop,
 		onMessageSent,
+		dispatch,
 		sendMessage,
 	])
 
@@ -1354,13 +1432,22 @@ function InputBar({
 				console.log('🎤 voice sent:', audioBlob.size, 'bytes')
 				setVoice(false)
 				onCancelReply?.()
+				focusInput()
 			} catch (err) {
 				console.error('Voice send error:', err)
 			} finally {
 				setSending(false)
 			}
 		},
-		[sending, convId, buildForm, onCancelReply, onMessageSent, sendMessage],
+		[
+			sending,
+			convId,
+			buildForm,
+			focusInput,
+			onCancelReply,
+			onMessageSent,
+			sendMessage,
+		],
 	)
 
 	return (
@@ -1378,6 +1465,7 @@ function InputBar({
 			)}
 
 			<div
+				onClick={focusInput}
 				style={{
 					display: 'flex',
 					alignItems: 'flex-end',
@@ -1453,10 +1541,8 @@ function InputBar({
 								ref={taRef}
 								value={text}
 								onChange={e => {
-									const value = e.target.value
-									setText(value)
-									if (value.trim()) onTypingStart?.()
-									else onTypingStop?.()
+									setText(e.target.value)
+									notifyTyping()
 								}}
 								onKeyDown={onKey}
 								placeholder='Xabar yozing...'
@@ -1609,6 +1695,7 @@ function MainPanel({
 	onBack,
 	convLoading,
 }) {
+	const dispatch = useDispatch()
 	const { chatId: paramId } = useParams()
 	const convId = selectedConv?._id || paramId
 
@@ -1622,188 +1709,136 @@ function MainPanel({
 			skip: !convId,
 		},
 	)
+	const [markConversationRead] = useMarkConversationReadMutation()
+	const [markMessageRead] = useMarkMessageReadMutation()
 
 	const meta = selectedConv ? getConvMeta(selectedConv, meId) : null
+	const typingMap = useSelector(
+		state => state.realtime.typingByConversation?.[convId] || {},
+	)
+	const typingMeta = buildTypingLabel(typingMap, !!meta?.isGroup)
+	const isSocketConnected = useSelector(
+		state => state.realtime?.isConnected ?? false,
+	)
 
 	const [liveMessages, setLiveMessages] = useState([])
 	const [replyTo, setReplyTo] = useState(null)
 	const [ctxMenu, setCtxMenu] = useState(null)
-	const [typingUsers, setTypingUsers] = useState([])
 	const [newMsgCount, setNewMsgCount] = useState(0)
 	const [isAtBottom, setIsAtBottom] = useState(true)
+	const normalizedMeId = normalizeId(meId)
+	const showMsgSkeleton = msgLoading && liveMessages.length === 0
 
 	const listRef = useRef(null)
 	const atBottomRef = useRef(true)
 	const seenMessageIdsRef = useRef(new Set())
-	const typingTimerRef = useRef(null)
-	const isTypingRef = useRef(false)
+	const hasHydratedMessagesRef = useRef(false)
+	const markReadTimeoutRef = useRef(null)
+	const perMessageReadTimersRef = useRef(new Map())
 
-	const addIncomingMessage = useCallback(msg => {
-		const messageId = getMessageId(msg)
-		if (!messageId) return
-		if (seenMessageIdsRef.current.has(messageId)) return
+	const scheduleConversationRead = useCallback(
+		(delay = 420) => {
+			if (!convId) return
+			if (markReadTimeoutRef.current) {
+				clearTimeout(markReadTimeoutRef.current)
+			}
+			markReadTimeoutRef.current = setTimeout(() => {
+				markConversationRead(convId).catch(() => {})
+				markReadTimeoutRef.current = null
+			}, delay)
+		},
+		[convId, markConversationRead],
+	)
 
-		seenMessageIdsRef.current.add(messageId)
-		setLiveMessages(prev => mergeUniqueMessages(prev, [msg]))
+	const scheduleMessageRead = useCallback(
+		messageId => {
+			if (!messageId) return
+			const exists = perMessageReadTimersRef.current.get(messageId)
+			if (exists) return
+
+			const timeout = setTimeout(() => {
+				markMessageRead(messageId).catch(() => {})
+				perMessageReadTimersRef.current.delete(messageId)
+			}, 420)
+
+			perMessageReadTimersRef.current.set(messageId, timeout)
+		},
+		[markMessageRead],
+	)
+
+	// Reset reply when conv changes
+	useEffect(() => {
+		setReplyTo(null)
+		setNewMsgCount(0)
+		setLiveMessages([])
+		seenMessageIdsRef.current = new Set()
+		hasHydratedMessagesRef.current = false
+		scheduleConversationRead(80)
+		return () => {
+			if (markReadTimeoutRef.current) {
+				clearTimeout(markReadTimeoutRef.current)
+				markReadTimeoutRef.current = null
+			}
+			for (const timeout of perMessageReadTimersRef.current.values()) {
+				clearTimeout(timeout)
+			}
+			perMessageReadTimersRef.current.clear()
+		}
+	}, [convId, scheduleConversationRead])
+
+	useEffect(() => {
+		if (!Array.isArray(messages)) return
+
+		const unseenMessages = []
+		for (const item of messages) {
+			const id = getMessageId(item)
+			if (!id || seenMessageIdsRef.current.has(id)) continue
+			seenMessageIdsRef.current.add(id)
+			unseenMessages.push(item)
+		}
+
+		setLiveMessages(prev => mergeUniqueMessages(prev, messages))
+
+		if (!hasHydratedMessagesRef.current) {
+			hasHydratedMessagesRef.current = true
+			return
+		}
+
+		const incomingCount = unseenMessages.filter(item => {
+			const senderId = normalizeId(item?.sender?._id || item?.sender)
+			return senderId && senderId !== normalizedMeId
+		}).length
+
+		if (incomingCount === 0) return
+
+		for (const item of unseenMessages) {
+			const senderId = normalizeId(item?.sender?._id || item?.sender)
+			const messageId = getMessageId(item)
+			if (!messageId) continue
+			if (!senderId || senderId === normalizedMeId) continue
+			if (item?.is_read || item?.read) continue
+			scheduleMessageRead(messageId)
+		}
 
 		if (atBottomRef.current) {
+			scheduleConversationRead(120)
 			requestAnimationFrame(() => {
 				if (listRef.current) {
 					listRef.current.scrollTo({ top: 0, behavior: 'smooth' })
 				}
 			})
-		} else {
-			setNewMsgCount(c => c + 1)
+			return
 		}
-	}, [])
 
-	// Reset reply when conv changes
-	useEffect(() => {
-		setReplyTo(null)
-		setTypingUsers([])
-		setNewMsgCount(0)
-		setLiveMessages([])
-		seenMessageIdsRef.current = new Set()
-		if (typingTimerRef.current) {
-			clearTimeout(typingTimerRef.current)
-			typingTimerRef.current = null
-		}
-		isTypingRef.current = false
-	}, [convId])
+		setNewMsgCount(count => count + incomingCount)
+	}, [messages, normalizedMeId, scheduleConversationRead, scheduleMessageRead])
 
 	useEffect(() => {
-		if (!Array.isArray(messages)) return
-		setLiveMessages(prev => mergeUniqueMessages(prev, messages))
-		for (const item of messages) {
-			const id = getMessageId(item)
-			if (id) seenMessageIdsRef.current.add(id)
-		}
-	}, [messages])
-
-	useEffect(() => {
-		if (!convId || !meId) return
-		const currentConvId = normalizeId(convId)
-		const currentUserId = normalizeId(meId)
-
-		const payload = {
-			conversationId: convId,
-			chatId: convId,
-			userId: meId,
-			firstname: me?.firstname,
-			lastname: me?.lastname,
-			avatar: me?.avatar,
-		}
-
-		socket.emit('join_conversation', payload)
-
-		const onIncomingMessage = incomingMsg => {
-			if (!incomingMsg) return
-			const incomingConvId = getMessageConversationId(incomingMsg)
-			if (incomingConvId && incomingConvId !== currentConvId) return
-			addIncomingMessage(incomingMsg)
-		}
-
-		const onTypingStart = incoming => {
-			const p = normalizeTypingPayload(incoming)
-			if (!p) return
-			const incomingConvId = getTypingConversationId(p)
-			if (incomingConvId && incomingConvId !== currentConvId) return
-			const userId = getTypingUserId(p)
-			if (!userId || userId === currentUserId) return
-			const name = getTypingName(p)
-			setTypingUsers(prev => {
-				if (prev.some(u => u.userId === userId)) return prev
-				return [...prev, { userId, name }]
-			})
-		}
-
-		const onTypingStop = incoming => {
-			const p = normalizeTypingPayload(incoming)
-			if (!p) return
-			const incomingConvId = getTypingConversationId(p)
-			if (incomingConvId && incomingConvId !== currentConvId) return
-			const userId = getTypingUserId(p)
-			if (!userId || userId === currentUserId) return
-			setTypingUsers(prev => prev.filter(u => u.userId !== userId))
-		}
-
-		socket.on('message:new', onIncomingMessage)
-		socket.on('receive_message', onIncomingMessage)
-		socket.on('typing_start', onTypingStart)
-		socket.on('typingStart', onTypingStart)
-		socket.on('typing:start', onTypingStart)
-		socket.on('typing_stop', onTypingStop)
-		socket.on('typingStop', onTypingStop)
-		socket.on('typing:stop', onTypingStop)
-
+		dispatch(realtimeActions.setActiveConversation(convId || ''))
 		return () => {
-			if (isTypingRef.current) {
-				socket.emit('typing_stop', payload)
-				isTypingRef.current = false
-			}
-			socket.emit('leave_conversation', payload)
-			socket.off('message:new', onIncomingMessage)
-			socket.off('receive_message', onIncomingMessage)
-			socket.off('typing_start', onTypingStart)
-			socket.off('typingStart', onTypingStart)
-			socket.off('typing:start', onTypingStart)
-			socket.off('typing_stop', onTypingStop)
-			socket.off('typingStop', onTypingStop)
-			socket.off('typing:stop', onTypingStop)
+			dispatch(realtimeActions.clearActiveConversation())
 		}
-	}, [
-		addIncomingMessage,
-		convId,
-		me?.avatar,
-		me?.firstname,
-		me?.lastname,
-		meId,
-	])
-
-	const handleTypingStart = useCallback(() => {
-		if (!convId || !meId) return
-		const payload = {
-			conversationId: convId,
-			chatId: convId,
-			userId: meId,
-			firstname: me?.firstname,
-			lastname: me?.lastname,
-			avatar: me?.avatar,
-		}
-		if (!isTypingRef.current) {
-			socket.emit('typing_start', payload)
-			socket.emit('typingStart', payload)
-			socket.emit('typing:start', payload)
-			isTypingRef.current = true
-		}
-		if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
-		typingTimerRef.current = setTimeout(() => {
-			socket.emit('typing_stop', payload)
-			socket.emit('typingStop', payload)
-			socket.emit('typing:stop', payload)
-			isTypingRef.current = false
-		}, TYPING_IDLE_MS)
-	}, [convId, me?.avatar, me?.firstname, me?.lastname, meId])
-
-	const handleTypingStop = useCallback(() => {
-		if (!convId || !meId || !isTypingRef.current) return
-		const payload = {
-			conversationId: convId,
-			chatId: convId,
-			userId: meId,
-			firstname: me?.firstname,
-			lastname: me?.lastname,
-			avatar: me?.avatar,
-		}
-		socket.emit('typing_stop', payload)
-		socket.emit('typingStop', payload)
-		socket.emit('typing:stop', payload)
-		isTypingRef.current = false
-		if (typingTimerRef.current) {
-			clearTimeout(typingTimerRef.current)
-			typingTimerRef.current = null
-		}
-	}, [convId, me?.avatar, me?.firstname, me?.lastname, meId])
+	}, [convId, dispatch])
 
 	const handleCtx = useCallback(
 		(x, y, msg, isMine) => setCtxMenu({ x, y, msg, isMine }),
@@ -1830,18 +1865,16 @@ function MainPanel({
 		}
 	}, [])
 
-	const handleMessageSent = useCallback(
-		response => {
-			const sentMessage =
-				response?.message ||
-				response?.data ||
-				(Array.isArray(response) ? response[0] : response)
+	const handleMessageSent = useCallback(response => {
+		const sentMessage =
+			response?.message ||
+			response?.data ||
+			(Array.isArray(response) ? response[0] : response)
 
-			if (!sentMessage || !getMessageId(sentMessage)) return
-			addIncomingMessage(sentMessage)
-		},
-		[addIncomingMessage],
-	)
+		if (!sentMessage || !getMessageId(sentMessage)) return
+		// Local optimistic rendering removed intentionally.
+		// Message list now follows backend/cache flow only.
+	}, [])
 
 	const handleListScroll = useCallback(() => {
 		const el = listRef.current
@@ -1849,8 +1882,11 @@ function MainPanel({
 		const atBottomNow = Math.abs(el.scrollTop) < 80
 		atBottomRef.current = atBottomNow
 		setIsAtBottom(atBottomNow)
-		if (atBottomNow) setNewMsgCount(0)
-	}, [])
+		if (atBottomNow) {
+			setNewMsgCount(0)
+			scheduleConversationRead(180)
+		}
+	}, [scheduleConversationRead])
 
 	const scrollToLatest = useCallback(() => {
 		const el = listRef.current
@@ -1861,8 +1897,22 @@ function MainPanel({
 		atBottomRef.current = true
 	}, [])
 
-	const normalizedMeId = normalizeId(meId)
-	const typingText = formatTypingText(typingUsers, !!meta?.isGroup)
+	useEffect(() => {
+		if (!convId) return
+
+		const onVisibilityOrFocus = () => {
+			if (document.visibilityState !== 'visible') return
+			scheduleConversationRead(120)
+		}
+
+		window.addEventListener('focus', onVisibilityOrFocus)
+		document.addEventListener('visibilitychange', onVisibilityOrFocus)
+
+		return () => {
+			window.removeEventListener('focus', onVisibilityOrFocus)
+			document.removeEventListener('visibilitychange', onVisibilityOrFocus)
+		}
+	}, [convId, scheduleConversationRead])
 
 	const dotColor = isDark ? 'rgba(255,255,255,.016)' : 'rgba(0,0,0,.025)'
 	const dotBg = `radial-gradient(circle, ${dotColor} 1px, transparent 1px)`
@@ -2100,28 +2150,38 @@ function MainPanel({
 						>
 							{truncate(meta.name, 30)}
 						</div>
-						<div
-							style={{
-								fontSize: 12,
-								fontWeight: 500,
-								color: typingText
-									? '#0A84FF'
-									: meta.online
-										? '#30D158'
-										: 'var(--txt3)',
-								overflow: 'hidden',
-								textOverflow: 'ellipsis',
-								whiteSpace: 'nowrap',
-								transition: 'color .2s',
-							}}
-						>
-							{typingText ||
-								(meta.isGroup
-									? `${selectedConv?.members?.length ?? 0} a'zo`
-									: meta.online
-										? 'online'
-										: "so'nggi marta ko'rildi")}
-						</div>
+						{(() => {
+							const hasTyping = typingMeta.hasTyping
+							const typingLabel = typingMeta.label
+							return (
+								<div
+									style={{
+										fontSize: 12,
+										fontWeight: hasTyping ? 500 : 500,
+										color: !isSocketConnected
+											? '#FF9F0A'
+											: hasTyping
+												? '#0A84FF'
+												: meta.online
+													? '#30D158'
+													: 'var(--txt3)',
+										overflow: 'hidden',
+										textOverflow: 'ellipsis',
+										whiteSpace: 'nowrap',
+									}}
+								>
+									{!isSocketConnected
+										? 'Ulanmoqda...'
+										: hasTyping
+											? typingLabel
+											: meta.isGroup
+												? `${selectedConv?.members?.length ?? 0} a'zo`
+												: meta.online
+													? 'online'
+													: "so'nggi marta ko'rildi"}
+								</div>
+							)
+						})()}
 					</div>
 					<div style={{ display: 'flex', gap: 2 }}>
 						{[
@@ -2197,7 +2257,7 @@ function MainPanel({
 			>
 				{/* column-reverse tufayli content tepadagi div pastga itariladi */}
 				<div style={{ paddingBottom: 6 }}>
-					{msgLoading ? (
+					{showMsgSkeleton ? (
 						<MsgSkeletons />
 					) : liveMessages.length === 0 ? (
 						<div
@@ -2321,8 +2381,6 @@ function MainPanel({
 						: null
 				}
 				onCancelReply={() => setReplyTo(null)}
-				onTypingStart={handleTypingStart}
-				onTypingStop={handleTypingStop}
 				onMessageSent={handleMessageSent}
 			/>
 

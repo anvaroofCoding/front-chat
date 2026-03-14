@@ -88,6 +88,18 @@ export const api = createApi({
 					: [{ type: 'Messages', id: 'LIST' }]
 			},
 		}),
+		markMessageRead: builder.mutation({
+			query: messageId => ({
+				url: `/messages/${messageId}/read`,
+				method: 'PUT',
+			}),
+		}),
+		markConversationRead: builder.mutation({
+			query: conversationId => ({
+				url: `/messages/conversations/${conversationId}/read`,
+				method: 'PUT',
+			}),
+		}),
 		createChat: builder.mutation({
 			query: chatData => ({
 				url: '/chats',
@@ -108,6 +120,8 @@ export const {
 	useGetUserQuery,
 	useGetMessagesQuery,
 	useSendMessageMutation,
+	useMarkMessageReadMutation,
+	useMarkConversationReadMutation,
 	useGetChatsQuery,
 	useCreateChatMutation,
 } = api

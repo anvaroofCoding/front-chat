@@ -1,5 +1,6 @@
 import { useGetChatsQuery, useGetMeQuery } from '@/store/api'
 import { memo, useCallback, useMemo, useState } from 'react'
+import { useSelector } from 'react-redux'
 import { getColor } from './helpers'
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -67,6 +68,41 @@ function getConvMeta(conv, meId) {
 		avatar: null,
 		online: false,
 	}
+}
+
+function getTypingName(entry) {
+	if (!entry) return 'Kimdir'
+	const name = String(entry.name || '').trim()
+	if (!name) return 'Kimdir'
+	return name
+}
+
+function buildTypingLabel(typingMap, isGroup) {
+	const now = Date.now()
+	const activeUsers = Object.values(typingMap || {}).filter(
+		user => now - (user?.lastAt || 0) < 5000,
+	)
+
+	if (!activeUsers.length) return ''
+
+	const uniqueNames = []
+	for (const user of activeUsers) {
+		const name = getTypingName(user)
+		if (!uniqueNames.includes(name)) {
+			uniqueNames.push(name)
+		}
+	}
+
+	if (!isGroup || uniqueNames.length === 1) {
+		return `${uniqueNames[0]} yozmoqda...`
+	}
+
+	if (uniqueNames.length === 2) {
+		return `${uniqueNames[0]}, ${uniqueNames[1]} yozmoqda...`
+	}
+
+	const extraCount = uniqueNames.length - 2
+	return `${uniqueNames[0]}, ${uniqueNames[1]} va yana ${extraCount} kishi yozmoqda...`
 }
 
 // ─── SKELETON ────────────────────────────────────────────────────────────────
@@ -213,25 +249,32 @@ const ConvRow = memo(function ConvRow({
 	conv,
 	meta,
 	meId,
+	unreadCount,
 	selected,
 	onSelect,
 	isDark,
+	typingMap,
 }) {
 	const [hover, setHover] = useState(false)
 	const msg = conv.lastMessage
-	const isUnread = msg && !msg.read
+	const isUnread = unreadCount > 0 || (msg && !msg.read)
 	const isMine = msg?.sender?._id === meId || msg?.sender === meId
 	const sender =
 		!isMine && msg?.sender?.firstname
 			? truncate(msg.sender.firstname, 16) + ': '
 			: ''
-	const preview = msg?.text
-		? truncate(msg.text, 52)
-		: msg?.files?.length
-			? '📎 Fayl'
-			: msg?.video?.length
-				? '🎥 Video'
-				: null
+	const typingLabel = buildTypingLabel(typingMap, !!meta?.isGroup)
+	const hasTyping = Boolean(typingLabel)
+
+	const preview = hasTyping
+		? typingLabel
+		: msg?.text
+			? truncate(msg.text, 52)
+			: msg?.files?.length
+				? '📎 Fayl'
+				: msg?.video?.length
+					? '🎥 Video'
+					: null
 	const timeStr = formatTime(conv.lastMessageAt || conv.updatedAt)
 	const txt2 = isDark ? 'rgba(255,255,255,0.46)' : 'rgba(0,0,0,0.42)'
 
@@ -321,7 +364,7 @@ const ConvRow = memo(function ConvRow({
 				<div
 					style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}
 				>
-					{isMine && (
+					{isMine && !hasTyping && (
 						<svg
 							width='15'
 							height='11'
@@ -364,7 +407,7 @@ const ConvRow = memo(function ConvRow({
 					<span
 						style={{
 							fontSize: 14,
-							color: txt2,
+							color: hasTyping ? '#0A84FF' : txt2,
 							overflow: 'hidden',
 							textOverflow: 'ellipsis',
 							whiteSpace: 'nowrap',
@@ -376,17 +419,25 @@ const ConvRow = memo(function ConvRow({
 							<em style={{ opacity: 0.4, fontStyle: 'normal' }}>Xabar yo'q</em>
 						)}
 					</span>
-					{isUnread && !selected && (
+					{unreadCount > 0 && !selected && (
 						<div
 							style={{
-								width: 9,
-								height: 9,
-								borderRadius: '50%',
+								minWidth: unreadCount > 99 ? 24 : 20,
+								height: 20,
+								padding: '0 6px',
+								borderRadius: 999,
 								background: '#0A84FF',
+								color: '#fff',
+								fontSize: 11,
+								fontWeight: 700,
+								lineHeight: '20px',
+								textAlign: 'center',
 								flexShrink: 0,
 								boxShadow: '0 0 0 2px var(--bg)',
 							}}
-						/>
+						>
+							{unreadCount > 99 ? '99+' : unreadCount}
+						</div>
 					)}
 				</div>
 			</div>
@@ -601,9 +652,16 @@ function EmptyState({ q }) {
 function ConvList({ selectedId, onSelect, isDark }) {
 	const [tab, setTab] = useState('all')
 	const [q, setQ] = useState('')
+	const { typingByConversation = {} } = useSelector(
+		state => state.realtime || {},
+	)
 
 	// Backend ga type parametr yuboradi: all | private | group
-	const { data: conversations, isLoading, isFetching } = useGetChatsQuery(tab)
+	const {
+		data: conversations = [],
+		isLoading,
+		isFetching,
+	} = useGetChatsQuery(tab)
 	const { data: me } = useGetMeQuery()
 	const meId = me?._id
 
@@ -632,8 +690,9 @@ function ConvList({ selectedId, onSelect, isDark }) {
 		setQ('')
 	}, [])
 	const handleSearch = useCallback(v => setQ(v), [])
+	const handleSelect = useCallback(conv => onSelect(conv), [onSelect])
 
-	const showSkeleton = isLoading || isFetching
+	const showSkeleton = isLoading && (conversations?.length || 0) === 0
 
 	return (
 		<>
@@ -648,17 +707,24 @@ function ConvList({ selectedId, onSelect, isDark }) {
 				) : filtered.length === 0 ? (
 					<EmptyState q={q} />
 				) : (
-					filtered.map(({ conv, meta }) => (
-						<ConvRow
-							key={conv._id}
-							conv={conv}
-							meta={meta}
-							meId={meId}
-							selected={selectedId === conv._id}
-							onSelect={onSelect}
-							isDark={isDark}
-						/>
-					))
+					filtered.map(({ conv, meta }) =>
+						(() => {
+							const resolvedUnreadCount = conv.unreadCount ?? 0
+							return (
+								<ConvRow
+									key={conv._id}
+									conv={conv}
+									meta={meta}
+									meId={meId}
+									unreadCount={resolvedUnreadCount}
+									selected={selectedId === conv._id}
+									onSelect={handleSelect}
+									isDark={isDark}
+									typingMap={typingByConversation[conv._id]}
+								/>
+							)
+						})(),
+					)
 				)}
 			</div>
 		</>
