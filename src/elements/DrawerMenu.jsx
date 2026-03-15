@@ -1,16 +1,31 @@
+import { cn } from '@/lib/utils'
 import { useGetMeQuery } from '@/store/api'
 import { memo, useCallback, useState } from 'react'
 import Toggle from './Toggle'
 import { DrawerSkeleton } from './all-skeleton'
 import { getColor } from './helpers'
 
+// ── shadcn/ui ─────────────────────────────────────────────────────────────────
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+import {
+	Sheet,
+	SheetContent,
+	SheetHeader,
+	SheetTitle,
+} from '@/components/ui/sheet'
+
+// ─────────────────────────────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
 const truncate = (str = '', max = 60) =>
 	typeof str === 'string' && str.length > max ? str.slice(0, max) + '…' : str
 
-// ─── HQ SVG ICONS ────────────────────────────────────────────────────────────
-
+// ─── SVG ICONS ────────────────────────────────────────────────────────────────
 const Icons = {
 	chats: (
 		<svg width='22' height='22' viewBox='0 0 24 24' fill='none'>
@@ -94,16 +109,6 @@ const Icons = {
 			/>
 		</svg>
 	),
-	close: (
-		<svg width='13' height='13' viewBox='0 0 13 13' fill='none'>
-			<path
-				d='M1.5 1.5l10 10M11.5 1.5l-10 10'
-				stroke='currentColor'
-				strokeWidth='1.8'
-				strokeLinecap='round'
-			/>
-		</svg>
-	),
 	moon: (
 		<svg width='18' height='18' viewBox='0 0 24 24' fill='none'>
 			<path
@@ -137,6 +142,23 @@ const Icons = {
 			/>
 		</svg>
 	),
+	download: (
+		<svg width='18' height='18' viewBox='0 0 24 24' fill='none'>
+			<path
+				d='M12 3v13M7 12l5 5 5-5'
+				stroke='currentColor'
+				strokeWidth='1.8'
+				strokeLinecap='round'
+				strokeLinejoin='round'
+			/>
+			<path
+				d='M5 21h14'
+				stroke='currentColor'
+				strokeWidth='1.8'
+				strokeLinecap='round'
+			/>
+		</svg>
+	),
 	closeCircle: (
 		<svg width='20' height='20' viewBox='0 0 24 24' fill='none'>
 			<circle cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='1.7' />
@@ -150,248 +172,164 @@ const Icons = {
 	),
 }
 
-// ─── ICON BADGE ──────────────────────────────────────────────────────────────
+// ─── NAV COLORS ───────────────────────────────────────────────────────────────
+const NAV_COLORS = {
+	chats: {
+		bg: 'bg-[#0A84FF]/[.13]',
+		text: 'text-[#0A84FF]',
+		dot: 'bg-[#0A84FF]',
+		border: 'border-l-[#0A84FF]',
+	},
+	contacts: {
+		bg: 'bg-[#30D158]/[.13]',
+		text: 'text-[#30D158]',
+		dot: 'bg-[#30D158]',
+		border: 'border-l-[#30D158]',
+	},
+	calls: {
+		bg: 'bg-[#FF9F0A]/[.13]',
+		text: 'text-[#FF9F0A]',
+		dot: 'bg-[#FF9F0A]',
+		border: 'border-l-[#FF9F0A]',
+	},
+	saved: {
+		bg: 'bg-[#BF5AF2]/[.13]',
+		text: 'text-[#BF5AF2]',
+		dot: 'bg-[#BF5AF2]',
+		border: 'border-l-[#BF5AF2]',
+	},
+	settings: {
+		bg: 'bg-[#8E8E93]/[.13]',
+		text: 'text-[#8E8E93]',
+		dot: 'bg-[#8E8E93]',
+		border: 'border-l-[#8E8E93]',
+	},
+}
 
+// ─── NAV ICON ─────────────────────────────────────────────────────────────────
 function NavIcon({ iconKey, active }) {
-	const colors = {
-		chats: '#0A84FF',
-		contacts: '#30D158',
-		calls: '#FF9F0A',
-		saved: '#BF5AF2',
-		settings: '#8E8E93',
-	}
-	const bg = active ? colors[iconKey] + '22' : 'transparent'
-	const color = active ? colors[iconKey] : 'var(--txt2)'
-
+	const c = NAV_COLORS[iconKey]
 	return (
 		<div
-			style={{
-				width: 40,
-				height: 40,
-				borderRadius: 12,
-				background: bg,
-				display: 'flex',
-				alignItems: 'center',
-				justifyContent: 'center',
-				flexShrink: 0,
-				color,
-				transition: 'background 0.2s, color 0.2s',
-			}}
+			className={cn(
+				'w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200',
+				active ? `${c.bg} ${c.text}` : 'bg-transparent text-muted-foreground',
+			)}
 		>
 			{Icons[iconKey]}
 		</div>
 	)
 }
 
-// ─── AVATAR PREVIEW MODAL ─────────────────────────────────────────────────────
-
-const AvatarPreview = memo(function AvatarPreview({ src, name, onClose }) {
-	return (
-		<div
-			onClick={onClose}
-			style={{
-				position: 'fixed',
-				inset: 0,
-				zIndex: 999,
-				background: 'rgba(0,0,0,0.88)',
-				display: 'flex',
-				flexDirection: 'column',
-				alignItems: 'center',
-				justifyContent: 'center',
-				backdropFilter: 'blur(12px)',
-				WebkitBackdropFilter: 'blur(12px)',
-				animation: 'tgFadeIn 0.2s ease',
-			}}
-		>
-			{/* Top bar */}
-			<div
-				style={{
-					position: 'absolute',
-					top: 0,
-					left: 0,
-					right: 0,
-					padding: '16px 20px',
-					display: 'flex',
-					alignItems: 'center',
-					justifyContent: 'space-between',
-				}}
-				onClick={e => e.stopPropagation()}
-			>
-				<span
-					style={{
-						fontSize: 16,
-						fontWeight: 600,
-						color: '#fff',
-						overflow: 'hidden',
-						textOverflow: 'ellipsis',
-						whiteSpace: 'nowrap',
-						maxWidth: 220,
-					}}
-				>
-					{name}
-				</span>
-				<div style={{ display: 'flex', gap: 8 }}>
-					<a
-						href={src}
-						download
-						target='_blank'
-						rel='noreferrer'
-						style={{
-							width: 38,
-							height: 38,
-							borderRadius: '50%',
-							background: 'rgba(255,255,255,0.15)',
-							display: 'flex',
-							alignItems: 'center',
-							justifyContent: 'center',
-							color: '#fff',
-							textDecoration: 'none',
-						}}
-						title='Yuklab olish'
-					>
-						<svg width='18' height='18' viewBox='0 0 24 24' fill='none'>
-							<path
-								d='M12 3v13M7 12l5 5 5-5'
-								stroke='currentColor'
-								strokeWidth='1.8'
-								strokeLinecap='round'
-								strokeLinejoin='round'
-							/>
-							<path
-								d='M5 21h14'
-								stroke='currentColor'
-								strokeWidth='1.8'
-								strokeLinecap='round'
-							/>
-						</svg>
-					</a>
-					<button
-						onClick={onClose}
-						style={{
-							width: 38,
-							height: 38,
-							borderRadius: '50%',
-							border: 'none',
-							background: 'rgba(255,255,255,0.15)',
-							cursor: 'pointer',
-							display: 'flex',
-							alignItems: 'center',
-							justifyContent: 'center',
-							color: '#fff',
-						}}
-					>
-						{Icons.closeCircle}
-					</button>
-				</div>
-			</div>
-
-			{/* Image */}
-			<div
-				onClick={e => e.stopPropagation()}
-				style={{
-					maxWidth: '90vw',
-					maxHeight: '80vh',
-					borderRadius: 16,
-					overflow: 'hidden',
-					boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
-				}}
-			>
-				<img
-					src={src}
-					alt={name}
-					style={{
-						display: 'block',
-						maxWidth: '90vw',
-						maxHeight: '80vh',
-						width: 'auto',
-						height: 'auto',
-						objectFit: 'contain',
-					}}
-				/>
-			</div>
-
-			{/* Hint */}
-			<p
-				style={{
-					position: 'absolute',
-					bottom: 24,
-					fontSize: 13,
-					color: 'rgba(255,255,255,0.4)',
-				}}
-			>
-				Yopish uchun tashqariga bosing
-			</p>
-		</div>
-	)
-})
-
 // ─── NAV ITEM ─────────────────────────────────────────────────────────────────
-
 const NavItem = memo(function NavItem({ item, active, onClick }) {
-	const [hover, setHover] = useState(false)
-
+	const c = NAV_COLORS[item.key]
 	return (
-		<div
+		<button
 			onClick={onClick}
-			onMouseEnter={() => setHover(true)}
-			onMouseLeave={() => setHover(false)}
-			style={{
-				display: 'flex',
-				alignItems: 'center',
-				gap: 14,
-				padding: '10px 14px 10px 12px',
-				cursor: 'pointer',
-				background: active
-					? 'var(--hover)'
-					: hover
-						? 'var(--hover)'
-						: 'transparent',
-				borderLeft: active ? '3px solid #0A84FF' : '3px solid transparent',
-				transition: 'background 0.15s',
-				userSelect: 'none',
-			}}
+			className={cn(
+				'w-full flex items-center gap-3.5 pl-3 pr-3.5 py-2.5 text-left',
+				'border-l-[3px] transition-colors duration-150 select-none',
+				'hover:bg-accent',
+				active
+					? `bg-accent ${c.border}`
+					: 'border-l-transparent bg-transparent',
+			)}
 		>
 			<NavIcon iconKey={item.key} active={active} />
 			<span
-				style={{
-					flex: 1,
-					fontSize: 15,
-					fontWeight: active ? 600 : 450,
-					color: active ? 'var(--txt1)' : 'var(--txt1)',
-					overflow: 'hidden',
-					textOverflow: 'ellipsis',
-					whiteSpace: 'nowrap',
-					transition: 'font-weight 0.15s',
-				}}
+				className={cn(
+					'flex-1 text-[15px] text-foreground truncate',
+					active ? 'font-semibold' : 'font-normal',
+				)}
 			>
 				{item.label}
 			</span>
 			{active && (
-				<div
-					style={{
-						width: 7,
-						height: 7,
-						borderRadius: '50%',
-						background: '#0A84FF',
-						flexShrink: 0,
-					}}
-				/>
+				<span className={cn('w-[7px] h-[7px] rounded-full shrink-0', c.dot)} />
 			)}
-		</div>
+		</button>
 	)
 })
 
-// ─── DRAWER MENU ─────────────────────────────────────────────────────────────
+// ─── AVATAR PREVIEW (Dialog) ──────────────────────────────────────────────────
+const AvatarPreview = memo(function AvatarPreview({ src, name, onClose }) {
+	return (
+		<Dialog open onOpenChange={v => !v && onClose()}>
+			<DialogContent
+				className={cn(
+					'max-w-none w-screen h-screen p-0 border-0 rounded-none',
+					'bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center',
+					'[&>button]:hidden',
+				)}
+				onClick={onClose}
+			>
+				{/* Top bar */}
+				<div
+					className='absolute top-0 left-0 right-0 px-5 py-4 flex items-center justify-between z-10'
+					onClick={e => e.stopPropagation()}
+				>
+					<DialogTitle className='text-base font-semibold text-white truncate max-w-[220px]'>
+						{name}
+					</DialogTitle>
+					<div className='flex gap-2'>
+						<a
+							href={src}
+							download
+							target='_blank'
+							rel='noreferrer'
+							onClick={e => e.stopPropagation()}
+							className='w-[38px] h-[38px] rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors'
+							title='Yuklab olish'
+						>
+							{Icons.download}
+						</a>
+						<Button
+							variant='ghost'
+							size='icon'
+							className='w-[38px] h-[38px] rounded-full bg-white/15 hover:bg-white/25 text-white'
+							onClick={e => {
+								e.stopPropagation()
+								onClose()
+							}}
+						>
+							{Icons.closeCircle}
+						</Button>
+					</div>
+				</div>
 
+				{/* Image */}
+				<div
+					className='max-w-[90vw] max-h-[80vh] rounded-2xl overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.6)]'
+					onClick={e => e.stopPropagation()}
+				>
+					<img
+						src={src}
+						alt={name}
+						className='block max-w-[90vw] max-h-[80vh] w-auto h-auto object-contain'
+					/>
+				</div>
+
+				<p className='absolute bottom-6 text-[13px] text-white/40'>
+					Yopish uchun tashqariga bosing
+				</p>
+			</DialogContent>
+		</Dialog>
+	)
+})
+
+// ─── NAV ITEMS LIST ───────────────────────────────────────────────────────────
 const ITEMS = [
-	{ icon: '💬', label: 'Xabarlar', key: 'chats' },
-	{ icon: '👥', label: 'Kontaktlar', key: 'contacts' },
-	{ icon: '📞', label: "Qo'ng'iroqlar", key: 'calls' },
-	{ icon: '🔖', label: 'Saqlangan', key: 'saved' },
-	{ icon: '⚙️', label: 'Sozlamalar', key: 'settings' },
+	{ label: 'Xabarlar', key: 'chats' },
+	{ label: 'Kontaktlar', key: 'contacts' },
+	{ label: "Qo'ng'iroqlar", key: 'calls' },
+	{ label: 'Saqlangan', key: 'saved' },
+	{ label: 'Sozlamalar', key: 'settings' },
 ]
 
-function DrawerMenu({ isDark, setIsDark, onNav, onClose, page }) {
+// ─── DRAWER INNER CONTENT ────────────────────────────────────────────────────
+// Separated so Sheet renders it cleanly inside SheetContent
+function DrawerInner({ isDark, setIsDark, onNav, onClose, page }) {
 	const { data: me, isLoading: meLoading } = useGetMeQuery()
 	const [imgErr, setImgErr] = useState(false)
 	const [previewOpen, setPreviewOpen] = useState(false)
@@ -400,11 +338,14 @@ function DrawerMenu({ isDark, setIsDark, onNav, onClose, page }) {
 		[me?.firstname, me?.lastname].filter(Boolean).join(' ') || 'Foydalanuvchi',
 		40,
 	)
+
 	const avatarSrc = me?.avatar
 		? me.avatar.startsWith('http')
 			? me.avatar
 			: `${BASE_URL}${me.avatar}`
 		: null
+
+	const canPreview = Boolean(avatarSrc && !imgErr)
 
 	const handleNav = useCallback(
 		key => {
@@ -417,7 +358,7 @@ function DrawerMenu({ isDark, setIsDark, onNav, onClose, page }) {
 	return (
 		<>
 			{/* Avatar full-screen preview */}
-			{previewOpen && avatarSrc && !imgErr && (
+			{previewOpen && canPreview && (
 				<AvatarPreview
 					src={avatarSrc}
 					name={fullName}
@@ -425,289 +366,179 @@ function DrawerMenu({ isDark, setIsDark, onNav, onClose, page }) {
 				/>
 			)}
 
-			<div
-				style={{
-					display: 'flex',
-					flexDirection: 'column',
-					height: '100%',
-					background: 'var(--bg)',
-					overflowY: 'auto',
-					scrollbarWidth: 'none',
-				}}
-			>
-				{/* ── Profile banner ────────────────────────────── */}
-				{meLoading ? (
-					<DrawerSkeleton />
-				) : (
-					<div
-						style={{
-							background: 'linear-gradient(155deg, #1565c0 0%, #0A84FF 100%)',
-							padding: '24px 18px 22px',
-							position: 'relative',
-							flexShrink: 0,
-						}}
-					>
-						{/* Close button */}
-						<button
-							onClick={onClose}
-							style={{
-								position: 'absolute',
-								top: 14,
-								right: 14,
-								width: 32,
-								height: 32,
-								borderRadius: '50%',
-								border: 'none',
-								background: 'rgba(255,255,255,0.18)',
-								cursor: 'pointer',
-								display: 'flex',
-								alignItems: 'center',
-								justifyContent: 'center',
-								color: '#fff',
-								transition: 'background 0.15s',
-							}}
-							onMouseEnter={e =>
-								(e.currentTarget.style.background = 'rgba(255,255,255,0.28)')
-							}
-							onMouseLeave={e =>
-								(e.currentTarget.style.background = 'rgba(255,255,255,0.18)')
-							}
-						>
-							{Icons.close}
-						</button>
-
-						{/* Avatar — clickable to preview */}
-						<div
-							onClick={() => avatarSrc && !imgErr && setPreviewOpen(true)}
-							style={{
-								width: 72,
-								height: 72,
-								borderRadius: '50%',
-								overflow: 'hidden',
-								background: me ? getColor(me._id) : 'rgba(255,255,255,0.22)',
-								marginBottom: 16,
-								flexShrink: 0,
-								display: 'flex',
-								alignItems: 'center',
-								justifyContent: 'center',
-								fontSize: 28,
-								fontWeight: 700,
-								color: '#fff',
-								boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-								cursor: avatarSrc && !imgErr ? 'zoom-in' : 'default',
-								transition: 'transform 0.18s, box-shadow 0.18s',
-								position: 'relative',
-							}}
-							onMouseEnter={e => {
-								if (avatarSrc && !imgErr) {
-									e.currentTarget.style.transform = 'scale(1.05)'
-									e.currentTarget.style.boxShadow = '0 8px 28px rgba(0,0,0,0.4)'
-								}
-							}}
-							onMouseLeave={e => {
-								e.currentTarget.style.transform = 'scale(1)'
-								e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)'
-							}}
-						>
-							{avatarSrc && !imgErr ? (
-								<img
-									src={avatarSrc}
-									alt={fullName}
-									style={{
-										width: '100%',
-										height: '100%',
-										objectFit: 'cover',
-									}}
-									onError={() => setImgErr(true)}
-								/>
-							) : (
-								(me?.firstname?.[0] || '?').toUpperCase()
-							)}
-
-							{/* Zoom hint overlay */}
-							{avatarSrc && !imgErr && (
-								<div
-									style={{
-										position: 'absolute',
-										inset: 0,
-										borderRadius: '50%',
-										background: 'rgba(0,0,0,0)',
-										display: 'flex',
-										alignItems: 'center',
-										justifyContent: 'center',
-										color: '#fff',
-										opacity: 0,
-										transition: 'opacity 0.18s, background 0.18s',
-									}}
-									onMouseEnter={e => {
-										e.currentTarget.style.opacity = '1'
-										e.currentTarget.style.background = 'rgba(0,0,0,0.35)'
-									}}
-									onMouseLeave={e => {
-										e.currentTarget.style.opacity = '0'
-										e.currentTarget.style.background = 'rgba(0,0,0,0)'
-									}}
-								>
-									{Icons.zoom}
-								</div>
-							)}
-						</div>
-
-						{/* Name */}
-						<div
-							style={{
-								fontSize: 18,
-								fontWeight: 700,
-								color: '#fff',
-								letterSpacing: '-0.3px',
-								overflow: 'hidden',
-								textOverflow: 'ellipsis',
-								whiteSpace: 'nowrap',
-								lineHeight: 1.3,
-							}}
-						>
-							{fullName}
-						</div>
-
-						{/* Email */}
-						<div
-							style={{
-								fontSize: 13,
-								color: 'rgba(255,255,255,0.7)',
-								marginTop: 4,
-								overflow: 'hidden',
-								textOverflow: 'ellipsis',
-								whiteSpace: 'nowrap',
-							}}
-						>
-							{truncate(me?.email || '', 40)}
-						</div>
-
-						{/* Online badge */}
-						{me?.isOnline && (
-							<div
-								style={{
-									display: 'inline-flex',
-									alignItems: 'center',
-									gap: 5,
-									marginTop: 6,
-									background: 'rgba(48,209,88,0.25)',
-									borderRadius: 20,
-									padding: '2px 10px 2px 6px',
-								}}
+			<ScrollArea className='h-full'>
+				<div className='flex flex-col min-h-full'>
+					{/* ── Profile banner ──────────────────────────────────────────── */}
+					{meLoading ? (
+						<DrawerSkeleton />
+					) : (
+						<div className='relative bg-gradient-to-br from-[#1565c0] to-[#0A84FF] px-[18px] pt-6 pb-[22px] shrink-0'>
+							{/* Close — uses SheetTitle hidden for a11y, real close via X button */}
+							<Button
+								variant='ghost'
+								size='icon'
+								onClick={onClose}
+								className='absolute top-[14px] right-[14px] w-8 h-8 rounded-full bg-white/[.18] hover:bg-white/[.28] text-white'
 							>
-								<div
+								<svg width='13' height='13' viewBox='0 0 13 13' fill='none'>
+									<path
+										d='M1.5 1.5l10 10M11.5 1.5l-10 10'
+										stroke='currentColor'
+										strokeWidth='1.8'
+										strokeLinecap='round'
+									/>
+								</svg>
+							</Button>
+
+							{/* Avatar */}
+							<div className='relative w-[72px] h-[72px] mb-4 group'>
+								<Avatar
+									className={cn(
+										'w-[72px] h-[72px] shadow-[0_4px_20px_rgba(0,0,0,0.3)]',
+										'transition-transform duration-200 group-hover:scale-105',
+										canPreview ? 'cursor-zoom-in' : 'cursor-default',
+									)}
 									style={{
-										width: 7,
-										height: 7,
-										borderRadius: '50%',
-										background: '#30D158',
+										background: me
+											? getColor(me._id)
+											: 'rgba(255,255,255,0.22)',
 									}}
-								/>
-								<span
-									style={{ fontSize: 12, color: '#30D158', fontWeight: 600 }}
+									onClick={() => canPreview && setPreviewOpen(true)}
 								>
-									Online
-								</span>
-							</div>
-						)}
+									<AvatarImage
+										src={avatarSrc ?? undefined}
+										alt={fullName}
+										className='object-cover'
+										onError={() => setImgErr(true)}
+									/>
+									<AvatarFallback className='text-white text-[28px] font-bold bg-transparent'>
+										{(me?.firstname?.[0] || '?').toUpperCase()}
+									</AvatarFallback>
+								</Avatar>
 
-						{/* Stats */}
-						<div style={{ display: 'flex', gap: 24, marginTop: 18 }}>
-							{[
-								['124', 'Kontakt'],
-								['8', 'Guruh'],
-								['3', 'Kanal'],
-							].map(([n, l]) => (
-								<div key={l} style={{ textAlign: 'center' }}>
-									<div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
-										{n}
-									</div>
+								{/* Zoom overlay */}
+								{canPreview && (
 									<div
-										style={{
-											fontSize: 11,
-											color: 'rgba(255,255,255,0.6)',
-											marginTop: 2,
-											fontWeight: 500,
-										}}
+										className={cn(
+											'absolute inset-0 rounded-full flex items-center justify-center text-white',
+											'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/35',
+											'transition-all duration-200 pointer-events-none',
+										)}
 									>
-										{l}
+										{Icons.zoom}
 									</div>
-								</div>
-							))}
+								)}
+							</div>
+
+							{/* Name */}
+							<p className='text-[18px] font-bold text-white tracking-tight leading-[1.3] truncate'>
+								{fullName}
+							</p>
+
+							{/* Email */}
+							<p className='text-[13px] text-white/70 mt-1 truncate'>
+								{truncate(me?.email || '', 40)}
+							</p>
+
+							{/* Online badge */}
+							{me?.isOnline && (
+								<Badge
+									variant='outline'
+									className='mt-1.5 gap-1.5 border-0 bg-[#30D158]/25 text-[#30D158] text-[12px] font-semibold px-2.5 py-0.5 rounded-full w-fit'
+								>
+									<span className='w-[7px] h-[7px] rounded-full bg-[#30D158] inline-block' />
+									Online
+								</Badge>
+							)}
+
+							{/* Stats */}
+							<div className='flex gap-6 mt-[18px]'>
+								{[
+									['124', 'Kontakt'],
+									['8', 'Guruh'],
+									['3', 'Kanal'],
+								].map(([n, l]) => (
+									<div key={l} className='text-center'>
+										<p className='text-[18px] font-bold text-white'>{n}</p>
+										<p className='text-[11px] text-white/60 mt-0.5 font-medium'>
+											{l}
+										</p>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+
+					{/* ── Nav items ────────────────────────────────────────────────── */}
+					<div className='flex-1 pt-1.5'>
+						{ITEMS.map(item => (
+							<NavItem
+								key={item.key}
+								item={item}
+								active={page === item.key}
+								onClick={() => handleNav(item.key)}
+							/>
+						))}
+
+						<Separator className='my-1' />
+
+						{/* Dark mode toggle */}
+						<div className='flex items-center gap-3.5 px-3 py-2.5 select-none'>
+							<div
+								className={cn(
+									'w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200',
+									isDark
+										? 'bg-[#5E5CE6]/[.18] text-[#5E5CE6]'
+										: 'bg-[#FF9F0A]/[.15] text-[#FF9F0A]',
+								)}
+							>
+								{isDark ? Icons.moon : Icons.sun}
+							</div>
+							<span className='flex-1 text-[15px] text-foreground'>
+								Tungi rejim
+							</span>
+							<Toggle value={isDark} onChange={setIsDark} />
 						</div>
 					</div>
-				)}
 
-				{/* ── Nav items ─────────────────────────────────── */}
-				<div style={{ flex: 1, paddingTop: 6 }}>
-					{ITEMS.map(item => (
-						<NavItem
-							key={item.key}
-							item={item}
-							active={page === item.key}
-							onClick={() => handleNav(item.key)}
-						/>
-					))}
-
-					{/* Dark mode row */}
-					<div
-						style={{
-							display: 'flex',
-							alignItems: 'center',
-							gap: 14,
-							padding: '10px 14px 10px 12px',
-							userSelect: 'none',
-						}}
-					>
-						<div
-							style={{
-								width: 40,
-								height: 40,
-								borderRadius: 12,
-								background: isDark
-									? 'rgba(94,92,230,0.18)'
-									: 'rgba(255,159,10,0.15)',
-								display: 'flex',
-								alignItems: 'center',
-								justifyContent: 'center',
-								flexShrink: 0,
-								color: isDark ? '#5E5CE6' : '#FF9F0A',
-								transition: 'background 0.25s, color 0.25s',
-							}}
-						>
-							{isDark ? Icons.moon : Icons.sun}
+					{/* ── Footer ───────────────────────────────────────────────────── */}
+					<div className='mt-auto'>
+						<Separator />
+						<div className='flex items-center justify-between px-[18px] py-3 pb-6'>
+							<span className='text-[12px] text-muted-foreground'>
+								Telegram v10.14.0
+							</span>
+							<span className='text-[12px] text-muted-foreground/60'>UZ</span>
 						</div>
-						<span
-							style={{
-								flex: 1,
-								fontSize: 15,
-								fontWeight: 450,
-								color: 'var(--txt1)',
-							}}
-						>
-							Tungi rejim
-						</span>
-						<Toggle value={isDark} onChange={setIsDark} />
 					</div>
 				</div>
-
-				{/* Footer */}
-				<div
-					style={{
-						padding: '12px 18px 24px',
-						fontSize: 12,
-						color: 'var(--txt3)',
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'space-between',
-					}}
-				>
-					<span>Telegram v10.14.0</span>
-					<span style={{ opacity: 0.6 }}>UZ</span>
-				</div>
-			</div>
+			</ScrollArea>
 		</>
+	)
+}
+
+// ─── DRAWER MENU (Sheet wrapper) ──────────────────────────────────────────────
+function DrawerMenu({ open, onClose, isDark, setIsDark, onNav, page }) {
+	return (
+		<Sheet open={open} onOpenChange={v => !v && onClose()}>
+			<SheetContent
+				side='left'
+				className='p-0 w-[290px] sm:w-[290px] max-w-[82vw] [&>button]:hidden'
+			>
+				{/* SheetHeader hidden but required for a11y */}
+				<SheetHeader className='sr-only'>
+					<SheetTitle>Navigatsiya menyusi</SheetTitle>
+				</SheetHeader>
+
+				<DrawerInner
+					isDark={isDark}
+					setIsDark={setIsDark}
+					onNav={onNav}
+					onClose={onClose}
+					page={page}
+				/>
+			</SheetContent>
+		</Sheet>
 	)
 }
 

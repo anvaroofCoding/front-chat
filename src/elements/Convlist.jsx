@@ -1,7 +1,16 @@
+import { cn } from '@/lib/utils'
 import { useGetChatsQuery, useGetMeQuery } from '@/store/api'
 import { memo, useCallback, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { getColor } from './helpers'
+
+// ── shadcn/ui ─────────────────────────────────────────────────────────────────
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || ''
@@ -73,100 +82,76 @@ function getConvMeta(conv, meId) {
 function getTypingName(entry) {
 	if (!entry) return 'Kimdir'
 	const name = String(entry.name || '').trim()
-	if (!name) return 'Kimdir'
-	return name
+	return name || 'Kimdir'
 }
 
 function buildTypingLabel(typingMap, isGroup) {
 	const now = Date.now()
 	const activeUsers = Object.values(typingMap || {}).filter(
-		user => now - (user?.lastAt || 0) < 5000,
+		u => now - (u?.lastAt || 0) < 5000,
 	)
-
 	if (!activeUsers.length) return ''
-
 	const uniqueNames = []
 	for (const user of activeUsers) {
 		const name = getTypingName(user)
-		if (!uniqueNames.includes(name)) {
-			uniqueNames.push(name)
-		}
+		if (!uniqueNames.includes(name)) uniqueNames.push(name)
 	}
-
-	if (!isGroup || uniqueNames.length === 1) {
+	if (!isGroup || uniqueNames.length === 1)
 		return `${uniqueNames[0]} yozmoqda...`
-	}
-
-	if (uniqueNames.length === 2) {
+	if (uniqueNames.length === 2)
 		return `${uniqueNames[0]}, ${uniqueNames[1]} yozmoqda...`
-	}
-
 	const extraCount = uniqueNames.length - 2
 	return `${uniqueNames[0]}, ${uniqueNames[1]} va yana ${extraCount} kishi yozmoqda...`
 }
 
-// ─── SKELETON ────────────────────────────────────────────────────────────────
-
-function Skel({ w = '100%', h = 14, r = 7 }) {
-	return (
-		<div
-			className='tg-skel'
-			style={{
-				width: w,
-				height: h,
-				borderRadius: r,
-				background: 'var(--skel)',
-				flexShrink: 0,
-			}}
-		/>
-	)
-}
+// ─── SKELETON ROWS ────────────────────────────────────────────────────────────
+const SKEL_PAIRS = [
+	['58%', '71%'],
+	['44%', '82%'],
+	['62%', '55%'],
+	['50%', '76%'],
+	['66%', '48%'],
+	['52%', '68%'],
+	['70%', '58%'],
+	['46%', '74%'],
+]
 
 const ConvSkeleton = memo(function ConvSkeleton({ index }) {
-	const pairs = [
-		['58%', '71%'],
-		['44%', '82%'],
-		['62%', '55%'],
-		['50%', '76%'],
-		['66%', '48%'],
-		['52%', '68%'],
-		['70%', '58%'],
-		['46%', '74%'],
-	]
-	const [nw, pw] = pairs[index % pairs.length]
+	const [nw, pw] = SKEL_PAIRS[index % SKEL_PAIRS.length]
 	return (
-		<div
-			style={{
-				display: 'flex',
-				alignItems: 'center',
-				padding: '11px 14px 11px 16px',
-				gap: 12,
-			}}
-		>
-			<Skel w={50} h={50} r={25} />
-			<div
-				style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 9 }}
-			>
-				<div
-					style={{
-						display: 'flex',
-						justifyContent: 'space-between',
-						alignItems: 'center',
-						gap: 8,
-					}}
-				>
-					<Skel w={nw} h={14} r={7} />
-					<Skel w={32} h={11} r={6} />
+		<div className='flex items-center px-4 py-[11px] gap-3'>
+			<Skeleton className='w-[50px] h-[50px] rounded-full shrink-0' />
+			<div className='flex-1 flex flex-col gap-2.5'>
+				<div className='flex justify-between items-center gap-2'>
+					<Skeleton className='h-[14px] rounded-[7px]' style={{ width: nw }} />
+					<Skeleton className='h-[11px] w-8 rounded-[6px]' />
 				</div>
-				<Skel w={pw} h={12} r={6} />
+				<Skeleton className='h-[12px] rounded-[6px]' style={{ width: pw }} />
 			</div>
 		</div>
 	)
 })
 
-// ─── AVATAR ──────────────────────────────────────────────────────────────────
+// ─── CONV AVATAR ──────────────────────────────────────────────────────────────
+const GroupIcon = ({ size }) => (
+	<svg width={size * 0.46} height={size * 0.46} viewBox='0 0 24 24' fill='none'>
+		<path
+			d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'
+			stroke='#fff'
+			strokeWidth='1.8'
+			strokeLinecap='round'
+		/>
+		<circle cx='9' cy='7' r='4' stroke='#fff' strokeWidth='1.8' />
+		<path
+			d='M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'
+			stroke='#fff'
+			strokeWidth='1.8'
+			strokeLinecap='round'
+		/>
+	</svg>
+)
 
-const Avatar = memo(function Avatar({
+const ConvAvatar = memo(function ConvAvatar({
 	name = '?',
 	color,
 	avatar,
@@ -175,67 +160,56 @@ const Avatar = memo(function Avatar({
 	isGroup,
 }) {
 	const [err, setErr] = useState(false)
+	const dotSize = Math.round(size * 0.26)
+	const dotPos = size > 40 ? 2 : 1
+	const dotBorder = size > 40 ? 'border-[2.5px]' : 'border-2'
+
 	return (
 		<div
+			className='relative shrink-0 rounded-full flex items-center justify-center font-bold text-white select-none overflow-hidden'
 			style={{
 				width: size,
 				height: size,
-				borderRadius: '50%',
-				background: color || getColor(name),
-				flexShrink: 0,
-				display: 'flex',
-				alignItems: 'center',
-				justifyContent: 'center',
 				fontSize: size * 0.38,
-				fontWeight: 700,
-				color: '#fff',
-				position: 'relative',
-				overflow: 'hidden',
-				userSelect: 'none',
+				background: color || getColor(name),
 			}}
 		>
 			{avatar && !err ? (
-				<img
-					src={avatar}
-					alt={truncate(name, 20)}
-					style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-					onError={() => setErr(true)}
-				/>
+				<Avatar className='w-full h-full rounded-full'>
+					<AvatarImage
+						src={avatar}
+						alt={truncate(name, 20)}
+						className='object-cover'
+						onError={() => setErr(true)}
+					/>
+					<AvatarFallback
+						style={{ background: color || getColor(name) }}
+						className='text-white font-bold rounded-full'
+					>
+						{isGroup ? (
+							<GroupIcon size={size} />
+						) : (
+							(name[0] || '?').toUpperCase()
+						)}
+					</AvatarFallback>
+				</Avatar>
 			) : isGroup ? (
-				<svg
-					width={size * 0.46}
-					height={size * 0.46}
-					viewBox='0 0 24 24'
-					fill='none'
-				>
-					<path
-						d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'
-						stroke='#fff'
-						strokeWidth='1.8'
-						strokeLinecap='round'
-					/>
-					<circle cx='9' cy='7' r='4' stroke='#fff' strokeWidth='1.8' />
-					<path
-						d='M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'
-						stroke='#fff'
-						strokeWidth='1.8'
-						strokeLinecap='round'
-					/>
-				</svg>
+				<GroupIcon size={size} />
 			) : (
 				(name[0] || '?').toUpperCase()
 			)}
+
 			{online && (
-				<div
+				<span
+					className={cn(
+						'absolute rounded-full bg-[#30D158] border-background',
+						dotBorder,
+					)}
 					style={{
-						position: 'absolute',
-						bottom: size > 40 ? 2 : 1,
-						right: size > 40 ? 2 : 1,
-						width: size * 0.26,
-						height: size * 0.26,
-						borderRadius: '50%',
-						background: '#30D158',
-						border: `${size > 40 ? 2.5 : 2}px solid var(--bg)`,
+						width: dotSize,
+						height: dotSize,
+						bottom: dotPos,
+						right: dotPos,
 					}}
 				/>
 			)}
@@ -243,8 +217,33 @@ const Avatar = memo(function Avatar({
 	)
 })
 
-// ─── CONV ROW ────────────────────────────────────────────────────────────────
+// ─── CHECK ICON ───────────────────────────────────────────────────────────────
+const CheckIcon = ({ color }) => (
+	<svg
+		width='15'
+		height='11'
+		viewBox='0 0 18 13'
+		fill='none'
+		className='shrink-0 opacity-50'
+	>
+		<path
+			d='M1 6.5L5.5 11L17 1'
+			stroke={color}
+			strokeWidth='1.7'
+			strokeLinecap='round'
+			strokeLinejoin='round'
+		/>
+		<path
+			d='M9 6.5l4.5 4.5'
+			stroke={color}
+			strokeWidth='1.7'
+			strokeLinecap='round'
+			strokeLinejoin='round'
+		/>
+	</svg>
+)
 
+// ─── CONV ROW ────────────────────────────────────────────────────────────────
 const ConvRow = memo(function ConvRow({
 	conv,
 	meta,
@@ -255,7 +254,6 @@ const ConvRow = memo(function ConvRow({
 	isDark,
 	typingMap,
 }) {
-	const [hover, setHover] = useState(false)
 	const msg = conv.lastMessage
 	const isUnread = unreadCount > 0 || (msg && !msg.read)
 	const isMine = msg?.sender?._id === meId || msg?.sender === meId
@@ -275,45 +273,26 @@ const ConvRow = memo(function ConvRow({
 				: msg?.video?.length
 					? '🎥 Video'
 					: null
+
 	const timeStr = formatTime(conv.lastMessageAt || conv.updatedAt)
-	const txt2 = isDark ? 'rgba(255,255,255,0.46)' : 'rgba(0,0,0,0.42)'
+	const txt2Color = isDark ? 'rgba(255,255,255,0.46)' : 'rgba(0,0,0,0.42)'
 
 	return (
 		<div
 			onClick={() => onSelect(conv)}
-			onMouseEnter={() => setHover(true)}
-			onMouseLeave={() => setHover(false)}
-			style={{
-				display: 'flex',
-				alignItems: 'center',
-				padding: '9px 14px 9px 16px',
-				gap: 12,
-				cursor: 'pointer',
-				position: 'relative',
-				background: selected
-					? 'var(--sel)'
-					: hover
-						? 'var(--hover)'
-						: 'transparent',
-				transition: 'background 0.13s',
-				WebkitTapHighlightColor: 'transparent',
-			}}
+			className={cn(
+				'relative flex items-center px-3.5 py-[9px] pl-4 gap-3 cursor-pointer',
+				'transition-colors duration-[130ms] select-none',
+				'active:bg-accent',
+				selected ? 'bg-[var(--sel,hsl(var(--accent)))]' : 'hover:bg-accent',
+			)}
 		>
+			{/* Active indicator */}
 			{selected && (
-				<div
-					style={{
-						position: 'absolute',
-						left: 0,
-						top: 8,
-						bottom: 8,
-						width: 3,
-						background: '#0A84FF',
-						borderRadius: '0 3px 3px 0',
-					}}
-				/>
+				<span className='absolute left-0 top-2 bottom-2 w-[3px] bg-[#0A84FF] rounded-r-[3px]' />
 			)}
 
-			<Avatar
+			<ConvAvatar
 				name={meta.name}
 				color={meta.color}
 				avatar={meta.avatar}
@@ -322,122 +301,52 @@ const ConvRow = memo(function ConvRow({
 				isGroup={meta.isGroup}
 			/>
 
-			<div style={{ flex: 1, minWidth: 0 }}>
-				{/* Row 1 */}
-				<div
-					style={{
-						display: 'flex',
-						alignItems: 'center',
-						justifyContent: 'space-between',
-						gap: 6,
-						marginBottom: 3,
-					}}
-				>
+			<div className='flex-1 min-w-0'>
+				{/* Row 1: name + time */}
+				<div className='flex items-center justify-between gap-1.5 mb-[3px]'>
 					<span
-						style={{
-							fontSize: 15,
-							fontWeight: isUnread ? 700 : 600,
-							color: 'var(--txt1)',
-							overflow: 'hidden',
-							textOverflow: 'ellipsis',
-							whiteSpace: 'nowrap',
-							flex: 1,
-							minWidth: 0,
-							lineHeight: 1.35,
-						}}
+						className={cn(
+							'text-[15px] text-foreground truncate flex-1 min-w-0 leading-[1.35]',
+							isUnread ? 'font-bold' : 'font-semibold',
+						)}
 					>
 						{truncate(meta.name, 30)}
 					</span>
 					<span
-						style={{
-							fontSize: 12,
-							flexShrink: 0,
-							color: isUnread ? '#0A84FF' : txt2,
-							fontWeight: isUnread ? 600 : 400,
-						}}
+						className={cn(
+							'text-[12px] shrink-0',
+							isUnread
+								? 'text-[#0A84FF] font-semibold'
+								: 'text-muted-foreground',
+						)}
 					>
 						{timeStr}
 					</span>
 				</div>
 
-				{/* Row 2 */}
-				<div
-					style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}
-				>
-					{isMine && !hasTyping && (
-						<svg
-							width='15'
-							height='11'
-							viewBox='0 0 18 13'
-							fill='none'
-							style={{ flexShrink: 0, opacity: 0.5 }}
-						>
-							<path
-								d='M1 6.5L5.5 11L17 1'
-								stroke={txt2}
-								strokeWidth='1.7'
-								strokeLinecap='round'
-								strokeLinejoin='round'
-							/>
-							<path
-								d='M9 6.5l4.5 4.5'
-								stroke={txt2}
-								strokeWidth='1.7'
-								strokeLinecap='round'
-								strokeLinejoin='round'
-							/>
-						</svg>
-					)}
+				{/* Row 2: preview + badge */}
+				<div className='flex items-center gap-1 min-w-0'>
+					{isMine && !hasTyping && <CheckIcon color={txt2Color} />}
+
 					{sender && (
-						<span
-							style={{
-								fontSize: 14,
-								color: '#0A84FF',
-								fontWeight: 500,
-								flexShrink: 0,
-								maxWidth: 86,
-								overflow: 'hidden',
-								textOverflow: 'ellipsis',
-								whiteSpace: 'nowrap',
-							}}
-						>
+						<span className='text-[14px] text-[#0A84FF] font-medium shrink-0 max-w-[86px] truncate'>
 							{sender}
 						</span>
 					)}
+
 					<span
-						style={{
-							fontSize: 14,
-							color: hasTyping ? '#0A84FF' : txt2,
-							overflow: 'hidden',
-							textOverflow: 'ellipsis',
-							whiteSpace: 'nowrap',
-							flex: 1,
-							minWidth: 0,
-						}}
-					>
-						{preview ?? (
-							<em style={{ opacity: 0.4, fontStyle: 'normal' }}>Xabar yo'q</em>
+						className={cn(
+							'text-[14px] truncate flex-1 min-w-0',
+							hasTyping ? 'text-[#0A84FF]' : 'text-muted-foreground',
 						)}
+					>
+						{preview ?? <em className='opacity-40 not-italic'>Xabar yo'q</em>}
 					</span>
+
 					{unreadCount > 0 && !selected && (
-						<div
-							style={{
-								minWidth: unreadCount > 99 ? 24 : 20,
-								height: 20,
-								padding: '0 6px',
-								borderRadius: 999,
-								background: '#0A84FF',
-								color: '#fff',
-								fontSize: 11,
-								fontWeight: 700,
-								lineHeight: '20px',
-								textAlign: 'center',
-								flexShrink: 0,
-								boxShadow: '0 0 0 2px var(--bg)',
-							}}
-						>
+						<Badge className='min-w-5 h-5 px-1.5 rounded-full bg-[#0A84FF] text-white text-[11px] font-bold leading-none shrink-0 flex items-center justify-center shadow-[0_0_0_2px_hsl(var(--background))]'>
 							{unreadCount > 99 ? '99+' : unreadCount}
-						</div>
+						</Badge>
 					)}
 				</div>
 			</div>
@@ -446,72 +355,44 @@ const ConvRow = memo(function ConvRow({
 })
 
 // ─── SEARCH BAR ──────────────────────────────────────────────────────────────
-
 const SearchBar = memo(function SearchBar({ value, onChange }) {
 	return (
-		<div
-			style={{
-				padding: '7px 12px 8px',
-				background: 'var(--hdr)',
-				flexShrink: 0,
-			}}
-		>
-			<div
-				style={{
-					background: 'var(--srch)',
-					borderRadius: 11,
-					display: 'flex',
-					alignItems: 'center',
-					padding: '7px 11px',
-					gap: 8,
-				}}
-			>
-				<svg width='15' height='15' viewBox='0 0 18 18' fill='none'>
+		<div className='px-3 py-[7px] pb-2 bg-background shrink-0'>
+			<div className='relative flex items-center'>
+				{/* Search icon */}
+				<svg
+					className='absolute left-3 text-muted-foreground pointer-events-none shrink-0'
+					width='15'
+					height='15'
+					viewBox='0 0 18 18'
+					fill='none'
+				>
 					<circle
 						cx='7.5'
 						cy='7.5'
 						r='5.5'
-						stroke='var(--txt2)'
+						stroke='currentColor'
 						strokeWidth='1.6'
 					/>
 					<path
 						d='M12 12L16 16'
-						stroke='var(--txt2)'
+						stroke='currentColor'
 						strokeWidth='1.6'
 						strokeLinecap='round'
 					/>
 				</svg>
-				<input
+
+				<Input
 					value={value}
 					onChange={e => onChange(e.target.value)}
 					placeholder='Qidirish'
-					style={{
-						background: 'transparent',
-						border: 'none',
-						outline: 'none',
-						fontSize: 15,
-						flex: 1,
-						fontFamily: 'inherit',
-						color: 'var(--txt1)',
-						minWidth: 0,
-					}}
+					className='pl-9 pr-8 h-9 rounded-[11px] bg-muted border-0 text-[15px] focus-visible:ring-0 focus-visible:ring-offset-0'
 				/>
+
 				{value && (
 					<button
 						onClick={() => onChange('')}
-						style={{
-							background: 'rgba(120,120,128,0.38)',
-							border: 'none',
-							cursor: 'pointer',
-							display: 'flex',
-							alignItems: 'center',
-							justifyContent: 'center',
-							padding: 0,
-							width: 18,
-							height: 18,
-							borderRadius: '50%',
-							flexShrink: 0,
-						}}
+						className='absolute right-2.5 w-[18px] h-[18px] rounded-full bg-muted-foreground/40 flex items-center justify-center shrink-0 hover:bg-muted-foreground/60 transition-colors'
 					>
 						<svg width='10' height='10' viewBox='0 0 10 10' fill='none'>
 							<path
@@ -529,70 +410,43 @@ const SearchBar = memo(function SearchBar({ value, onChange }) {
 })
 
 // ─── TAB BAR ─────────────────────────────────────────────────────────────────
-
 const TabBar = memo(function TabBar({ active, onChange }) {
 	return (
-		<div
-			style={{
-				display: 'flex',
-				background: 'var(--hdr)',
-				borderBottom: '0.5px solid var(--div)',
-				flexShrink: 0,
-				overflowX: 'auto',
-				scrollbarWidth: 'none',
-			}}
-		>
-			{TABS.map(t => (
-				<button
-					key={t.value}
-					onClick={() => onChange(t.value)}
-					style={{
-						padding: '10px 18px 9px',
-						fontSize: 13,
-						fontWeight: active === t.value ? 600 : 400,
-						color: active === t.value ? '#0A84FF' : 'var(--txt2)',
-						background: 'transparent',
-						border: 'none',
-						borderBottom:
-							active === t.value
-								? '2px solid #0A84FF'
-								: '2px solid transparent',
-						cursor: 'pointer',
-						whiteSpace: 'nowrap',
-						fontFamily: 'inherit',
-						transition: 'color 0.15s',
-						flexShrink: 0,
-						letterSpacing: '-0.1px',
-					}}
-				>
-					{t.label}
-				</button>
-			))}
+		<div className='bg-background border-b border-border/50 shrink-0'>
+			<Tabs value={active} onValueChange={onChange}>
+				<TabsList className='w-full h-auto bg-transparent rounded-none p-0 gap-0'>
+					{TABS.map(t => (
+						<TabsTrigger
+							key={t.value}
+							value={t.value}
+							className={cn(
+								'flex-1 rounded-none px-[18px] py-[10px] pb-[9px] text-[13px] font-normal',
+								'border-b-2 border-transparent bg-transparent',
+								'data-[state=active]:border-[#0A84FF] data-[state=active]:text-[#0A84FF]',
+								'data-[state=active]:font-semibold data-[state=active]:shadow-none',
+								'data-[state=active]:bg-transparent',
+								'text-muted-foreground transition-colors duration-150',
+							)}
+						>
+							{t.label}
+						</TabsTrigger>
+					))}
+				</TabsList>
+			</Tabs>
 		</div>
 	)
 })
 
 // ─── EMPTY STATE ─────────────────────────────────────────────────────────────
-
 function EmptyState({ q }) {
 	return (
-		<div
-			style={{
-				flex: 1,
-				display: 'flex',
-				flexDirection: 'column',
-				alignItems: 'center',
-				justifyContent: 'center',
-				gap: 10,
-				padding: '48px 24px',
-			}}
-		>
+		<div className='flex-1 flex flex-col items-center justify-center gap-2.5 px-6 py-12'>
 			<svg
 				width='52'
 				height='52'
 				viewBox='0 0 64 64'
 				fill='none'
-				style={{ opacity: 0.2 }}
+				className='opacity-20 text-foreground'
 			>
 				{q ? (
 					<>
@@ -600,12 +454,12 @@ function EmptyState({ q }) {
 							cx='27'
 							cy='27'
 							r='18'
-							stroke='var(--txt1)'
+							stroke='currentColor'
 							strokeWidth='3'
 						/>
 						<path
 							d='M40 40L56 56'
-							stroke='var(--txt1)'
+							stroke='currentColor'
 							strokeWidth='3'
 							strokeLinecap='round'
 						/>
@@ -613,32 +467,17 @@ function EmptyState({ q }) {
 				) : (
 					<path
 						d='M32 8C18.7 8 8 18 8 30.5c0 7.5 3.7 14.2 9.4 18.6L16 56l12-5.4A28 28 0 0 0 32 52c13.3 0 24-10 24-21.5S45.3 8 32 8z'
-						stroke='var(--txt1)'
+						stroke='currentColor'
 						strokeWidth='3'
 						strokeLinejoin='round'
 					/>
 				)}
 			</svg>
-			<p
-				style={{
-					fontSize: 15,
-					fontWeight: 600,
-					margin: 0,
-					color: 'var(--txt2)',
-				}}
-			>
+
+			<p className='text-[15px] font-semibold text-muted-foreground m-0'>
 				{q ? 'Natija topilmadi' : "Chatlar yo'q"}
 			</p>
-			<p
-				style={{
-					fontSize: 13,
-					margin: 0,
-					textAlign: 'center',
-					maxWidth: 200,
-					lineHeight: 1.55,
-					color: 'var(--txt3)',
-				}}
-			>
+			<p className='text-[13px] text-muted-foreground/60 text-center max-w-[200px] leading-[1.55] m-0'>
 				{q
 					? `"${truncate(q, 22)}" bo'yicha hech narsa yo'q`
 					: 'Yangi suhbat boshlash uchun + ni bosing'}
@@ -648,20 +487,15 @@ function EmptyState({ q }) {
 }
 
 // ─── MAIN ────────────────────────────────────────────────────────────────────
-
 function ConvList({ selectedId, onSelect, isDark }) {
 	const [tab, setTab] = useState('all')
 	const [q, setQ] = useState('')
+
 	const { typingByConversation = {} } = useSelector(
 		state => state.realtime || {},
 	)
 
-	// Backend ga type parametr yuboradi: all | private | group
-	const {
-		data: conversations = [],
-		isLoading,
-		isFetching,
-	} = useGetChatsQuery(tab)
+	const { data: conversations = [], isLoading } = useGetChatsQuery(tab)
 	const { data: me } = useGetMeQuery()
 	const meId = me?._id
 
@@ -674,7 +508,6 @@ function ConvList({ selectedId, onSelect, isDark }) {
 		[conversations, meId],
 	)
 
-	// Faqat local text search (tab filter backend da)
 	const filtered = useMemo(() => {
 		if (!q) return convsWithMeta
 		const ql = q.toLowerCase()
@@ -695,11 +528,11 @@ function ConvList({ selectedId, onSelect, isDark }) {
 	const showSkeleton = isLoading && (conversations?.length || 0) === 0
 
 	return (
-		<>
+		<div className='flex flex-col h-full overflow-hidden'>
 			<SearchBar value={q} onChange={handleSearch} />
 			<TabBar active={tab} onChange={handleTab} />
 
-			<div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none' }}>
+			<ScrollArea className='flex-1'>
 				{showSkeleton ? (
 					Array.from({ length: 8 }).map((_, i) => (
 						<ConvSkeleton key={i} index={i} />
@@ -707,27 +540,22 @@ function ConvList({ selectedId, onSelect, isDark }) {
 				) : filtered.length === 0 ? (
 					<EmptyState q={q} />
 				) : (
-					filtered.map(({ conv, meta }) =>
-						(() => {
-							const resolvedUnreadCount = conv.unreadCount ?? 0
-							return (
-								<ConvRow
-									key={conv._id}
-									conv={conv}
-									meta={meta}
-									meId={meId}
-									unreadCount={resolvedUnreadCount}
-									selected={selectedId === conv._id}
-									onSelect={handleSelect}
-									isDark={isDark}
-									typingMap={typingByConversation[conv._id]}
-								/>
-							)
-						})(),
-					)
+					filtered.map(({ conv, meta }) => (
+						<ConvRow
+							key={conv._id}
+							conv={conv}
+							meta={meta}
+							meId={meId}
+							unreadCount={conv.unreadCount ?? 0}
+							selected={selectedId === conv._id}
+							onSelect={handleSelect}
+							isDark={isDark}
+							typingMap={typingByConversation[conv._id]}
+						/>
+					))
 				)}
-			</div>
-		</>
+			</ScrollArea>
+		</div>
 	)
 }
 

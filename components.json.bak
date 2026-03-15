@@ -1,6 +1,6 @@
 {
   "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "base-nova",
+  "style": "radix-nova",
   "rsc": false,
   "tsx": false,
   "tailwind": {
@@ -21,7 +21,5 @@
   },
   "menuColor": "default",
   "menuAccent": "subtle",
-  "registries": {
-    "@scrollxui": "https://www.scrollxui.dev/registry/{name}.json"
-  }
+  "registries": {}
 }
