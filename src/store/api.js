@@ -62,10 +62,13 @@ export const api = createApi({
 				if (Array.isArray(response?.data)) return response.data
 				return []
 			},
-			providesTags: (r, e, id) => [
+			providesTags: (result, error, id) => [
 				{ type: 'Messages', id },
 				{ type: 'Messages', id: 'LIST' },
 			],
+		}),
+		getConversations: builder.query({
+			query: id => `/conversations/${id}`,
 		}),
 		sendMessage: builder.mutation({
 			// FormData to'g'ridan-to'g'ri body ga beriladi
@@ -80,6 +83,41 @@ export const api = createApi({
 				const conversationId =
 					arg?.get?.('conversationId') || arg?.get?.('chatId') || result?._id
 
+				return conversationId
+					? [
+							{ type: 'Messages', id: conversationId },
+							{ type: 'Messages', id: 'LIST' },
+						]
+					: [{ type: 'Messages', id: 'LIST' }]
+			},
+		}),
+		updateMessage: builder.mutation({
+			query: ({ messageId, ...body }) => ({
+				url: `/messages/${messageId}`,
+				method: 'PUT',
+				body,
+			}),
+			invalidatesTags: (result, error, arg) => {
+				const conversationId =
+					arg?.conversationId ||
+					result?.conversationId ||
+					result?.conversation?._id
+
+				return conversationId
+					? [
+							{ type: 'Messages', id: conversationId },
+							{ type: 'Messages', id: 'LIST' },
+						]
+					: [{ type: 'Messages', id: 'LIST' }]
+			},
+		}),
+		deleteMessage: builder.mutation({
+			query: ({ messageId }) => ({
+				url: `/messages/${messageId}`,
+				method: 'DELETE',
+			}),
+			invalidatesTags: (result, error, arg) => {
+				const conversationId = arg?.conversationId || result?.conversationId
 				return conversationId
 					? [
 							{ type: 'Messages', id: conversationId },
@@ -112,6 +150,7 @@ export const api = createApi({
 
 // Export hooks for usage in functional components
 export const {
+	useGetConversationsQuery,
 	useGetMeQuery,
 	useLoginMutation,
 	useRegisterMutation,
@@ -120,6 +159,8 @@ export const {
 	useGetUserQuery,
 	useGetMessagesQuery,
 	useSendMessageMutation,
+	useUpdateMessageMutation,
+	useDeleteMessageMutation,
 	useMarkMessageReadMutation,
 	useMarkConversationReadMutation,
 	useGetChatsQuery,
