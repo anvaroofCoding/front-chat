@@ -376,6 +376,10 @@ export const realtimeMiddleware = store => {
 					}),
 				)
 			}
+
+			if (conversationId) {
+				store.dispatch(realtimeActions.messageReceived({ conversationId }))
+			}
 			syncCachesFromIncomingMessage(message)
 			refetchChatLists()
 		}
@@ -517,6 +521,8 @@ export const realtimeMiddleware = store => {
 		socket.on('disconnect', onDisconnect)
 		socket.on('message:new', onIncomingMessage)
 		socket.on('receive_message', onIncomingMessage)
+		socket.on('new_message', onIncomingMessage)
+		socket.on('message', onIncomingMessage)
 		socket.on('message:read', onMessageRead)
 		socket.on('conversation:read', onConversationRead)
 		socket.on('typing', onTyping)
@@ -526,6 +532,8 @@ export const realtimeMiddleware = store => {
 		socket.on('typing_stop', onTypingStop)
 		socket.on('typingStart', onTypingStart)
 		socket.on('typingStop', onTypingStop)
+		socket.on('user_typing', onTypingStart)
+		socket.on('user_stop_typing', onTypingStop)
 	}
 
 	return next => action => {
@@ -607,11 +615,18 @@ export const realtimeMiddleware = store => {
 			const me = getMeFromStore()
 			const payload = buildPayload(convId, me)
 
-			socket.emit('typing', {
-				...payload,
-				isTyping: !!isTyping,
-			})
-			socket.emit(isTyping ? 'typing_start' : 'typing_stop', payload)
+			if (isTyping) {
+				socket.emit('typing', {
+					...payload,
+					isTyping: true,
+				})
+				socket.emit('typing_start', payload)
+				socket.emit('typing:start', payload)
+			} else {
+				socket.emit('typing_stop', payload)
+				socket.emit('typing:stop', payload)
+				socket.emit('stop_typing', payload)
+			}
 		}
 
 		return result

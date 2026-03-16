@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { socket } from '@/elements/socket'
 import { cn } from '@/lib/utils'
 import {
 	useDeleteMessageMutation,
@@ -1341,7 +1342,22 @@ export default function MainPages() {
 				}
 				form.append('files', f)
 			})
-			await sendMessage(form).unwrap()
+			const sent = await sendMessage(form).unwrap()
+
+			const candidate = sent?.message || sent?.data || sent
+			const normalizedOutgoing =
+				candidate && typeof candidate === 'object'
+					? {
+							...candidate,
+							conversationId:
+								candidate.conversationId || candidate.chatId || chatId,
+						}
+					: null
+
+			if (normalizedOutgoing?.conversationId) {
+				socket.emit('send_message', { message: normalizedOutgoing })
+				socket.emit('message:new', { message: normalizedOutgoing })
+			}
 			setDraft('')
 			setPendingFiles([])
 			setReplyTo(null)

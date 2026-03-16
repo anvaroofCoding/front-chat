@@ -4,10 +4,14 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const URL = import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api\/?$/, '')
 
 export const socket = io(URL, {
-	autoConnect: true,
+	autoConnect: false,
 	auth: { token: localStorage.getItem('token') || '' },
-	withCredentials: true,
+	withCredentials: false,
 	transports: ['websocket', 'polling'],
+	reconnection: true,
+	reconnectionAttempts: 20,
+	reconnectionDelay: 800,
+	reconnectionDelayMax: 5000,
 })
 
 export function ensureSocketAuth() {

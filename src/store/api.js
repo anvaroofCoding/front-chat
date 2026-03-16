@@ -3,7 +3,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 // Define a service using a base URL and expected endpoints
 export const api = createApi({
 	reducerPath: 'api',
-	tagTypes: ['Messages', 'Chats'],
+	tagTypes: ['Messages', 'Chats', 'Conversation'],
 	baseQuery: fetchBaseQuery({
 		baseUrl:
 			import.meta.env.VITE_API_URL || 'https://back-chat-97sy.onrender.com/api',
@@ -84,6 +84,7 @@ export const api = createApi({
 		}),
 		getConversations: builder.query({
 			query: id => `/conversations/${id}`,
+			providesTags: (result, error, id) => [{ type: 'Conversation', id }],
 		}),
 		sendMessage: builder.mutation({
 			// FormData to'g'ridan-to'g'ri body ga beriladi
@@ -196,11 +197,19 @@ export const api = createApi({
 				method: 'POST',
 				body: chatData,
 			}),
-			invalidatesTags: [
-				{ type: 'Chats', id: 'LIST' },
-				{ type: 'Chats', id: 'LIST-all' },
-				{ type: 'Chats', id: 'LIST-group' },
-			],
+			invalidatesTags: (result, error, arg) => {
+				const conversationId = arg?.id
+				const tags = [
+					{ type: 'Chats', id: 'LIST' },
+					{ type: 'Chats', id: 'LIST-all' },
+					{ type: 'Chats', id: 'LIST-group' },
+				]
+				if (conversationId) {
+					tags.push({ type: 'Conversation', id: conversationId })
+					tags.push({ type: 'Chats', id: conversationId })
+				}
+				return tags
+			},
 		}),
 	}),
 })
