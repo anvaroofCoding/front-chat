@@ -12,68 +12,39 @@ import {
 import { Field, FieldGroup } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { useCreateGroupMutation } from '@/store/api'
 import { UserPlus } from 'lucide-react'
 import { useState } from 'react'
 
-export default function CreateGroup({ onSuccess }) {
+export default function CreateChat() {
 	const [open, setOpen] = useState(false)
-	const [createGroup, { isLoading }] = useCreateGroupMutation()
 
-	const handleSubmit = async e => {
+	const handleSubmit = e => {
 		e.preventDefault()
 		const data = new FormData(e.currentTarget)
-		const name = String(data.get('name') ?? '')
-		const description = String(data.get('description') ?? '').slice(0, 100)
-		try {
-			await createGroup({
-				name,
-				description,
-			}).unwrap()
-			e.currentTarget.reset()
-			setOpen(false)
-			onSuccess?.()
-		} catch (error) {
-			console.error('Failed to create group:', error)
-		} finally {
-			setOpen(false)
-		}
+		console.log({ username: String(data.get('username') ?? '') })
+		setOpen(false)
 	}
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
 				<Button variant='default' className='w-full justify-between'>
-					Yangi guruh
+					Yangi chat
 					<UserPlus className='size-3.5' />
 				</Button>
 			</DialogTrigger>
 			<DialogContent className='sm:max-w-sm'>
 				<form onSubmit={handleSubmit}>
 					<DialogHeader>
-						<DialogTitle>Yangi guruh yaratish</DialogTitle>
+						<DialogTitle>Yangi chat boshlash</DialogTitle>
 						<DialogDescription>
-							Guruh ma&apos;lumotlarini kiriting.
+							Foydalanuvchi nomini kiriting.
 						</DialogDescription>
 					</DialogHeader>
 					<FieldGroup className='my-4'>
 						<Field>
-							<Label htmlFor='group-name'>Nomi</Label>
-							<Input
-								id='group-name'
-								name='name'
-								placeholder='Frontend jamoasi'
-							/>
-						</Field>
-						<Field>
-							<Label htmlFor='group-desc'>Tavsif</Label>
-							<Textarea
-								id='group-desc'
-								name='description'
-								maxLength={100}
-								placeholder='Guruh haqida...'
-							/>
+							<Label htmlFor='chat-user'>Foydalanuvchi</Label>
+							<Input id='chat-user' name='username' placeholder='@username' />
 						</Field>
 					</FieldGroup>
 					<DialogFooter>
@@ -82,9 +53,7 @@ export default function CreateGroup({ onSuccess }) {
 								Bekor
 							</Button>
 						</DialogClose>
-						<Button type='submit' disabled={isLoading}>
-							{isLoading ? 'Saqlanmoqda...' : 'Saqlash'}
-						</Button>
+						<Button type='submit'>Boshlash</Button>
 					</DialogFooter>
 				</form>
 			</DialogContent>

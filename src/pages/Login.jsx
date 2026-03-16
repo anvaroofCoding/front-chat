@@ -34,7 +34,12 @@ export default function Login() {
 			toast.success('Muvaffaqiyatli kirdingiz!')
 			localStorage.setItem('token', res.token)
 			localStorage.setItem('email', res.user.email)
-			localStorage.setItem('userId', res.user.id)
+			const resolvedUserId = res?.user?._id || res?.user?.id || ''
+			if (resolvedUserId) {
+				localStorage.setItem('userId', String(resolvedUserId))
+			} else {
+				localStorage.removeItem('userId')
+			}
 			localStorage.setItem('isAdmin', res.user.isAdmin)
 			navigate('/')
 			setGmail('')

@@ -1,7 +1,16 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+	Popover,
+	PopoverContent,
+	PopoverDescription,
+	PopoverHeader,
+	PopoverTitle,
+	PopoverTrigger,
+} from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,6 +32,8 @@ import {
 import { useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { useNavigate, useParams } from 'react-router-dom'
+import CreateChat from './create-chat'
+import CreateGroup from './create-group'
 
 function isGroupChat(chat) {
 	return (
@@ -175,8 +186,8 @@ function ChatRow({ chat, meId, isActive, onSelect, typingMap }) {
 			className={cn(
 				'group relative flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-all duration-200',
 				isActive
-					? 'bg-accent shadow-sm dark:bg-white/10'
-					: 'hover:bg-accent/60 active:scale-[0.99] dark:hover:bg-white/20',
+					? 'bg-white shadow-sm ring-1 ring-slate-200/70 dark:bg-slate-800 dark:ring-slate-700/70'
+					: 'hover:bg-white/80 active:scale-[0.99] dark:hover:bg-slate-800/70',
 			)}
 		>
 			{/* Active indicator */}
@@ -212,7 +223,35 @@ function ChatRow({ chat, meId, isActive, onSelect, typingMap }) {
 				<div className='mb-0.5 flex items-center justify-between gap-2'>
 					<div className='flex min-w-0 items-center gap-1.5'>
 						{isPinned && (
-							<Pin className='size-3 shrink-0 rotate-45 text-primary/60' />
+							<Popover>
+								<PopoverTrigger asChild>
+									<Button variant='outline'>
+										<Pin className='size-3 shrink-0 rotate-45 text-primary/60' />
+									</Button>
+								</PopoverTrigger>
+								<PopoverContent className='w-64' align='start'>
+									<PopoverHeader>
+										<PopoverTitle>Dimensions</PopoverTitle>
+										<PopoverDescription>
+											Set the dimensions for the layer.
+										</PopoverDescription>
+									</PopoverHeader>
+									<FieldGroup className='gap-4'>
+										<Field orientation='horizontal'>
+											<FieldLabel htmlFor='width' className='w-1/2'>
+												Width
+											</FieldLabel>
+											<Input id='width' defaultValue='100%' />
+										</Field>
+										<Field orientation='horizontal'>
+											<FieldLabel htmlFor='height' className='w-1/2'>
+												Height
+											</FieldLabel>
+											<Input id='height' defaultValue='25px' />
+										</Field>
+									</FieldGroup>
+								</PopoverContent>
+							</Popover>
 						)}
 						<p
 							className={cn(
@@ -302,6 +341,8 @@ function SkeletonRow() {
 }
 
 export default function Menu() {
+	const [open, setOpen] = useState(false)
+
 	const [tab, setTab] = useState('all')
 	const [search, setSearch] = useState('')
 	const navigate = useNavigate()
@@ -350,9 +391,9 @@ export default function Menu() {
 	}, [allChats])
 
 	return (
-		<div className='flex h-full w-full flex-col bg-background text-foreground'>
+		<div className='flex h-full w-full flex-col bg-slate-50/95 text-slate-900 dark:bg-slate-900 dark:text-slate-100'>
 			{/* ── Header ── */}
-			<div className='flex items-center gap-2 px-3 pb-2 pt-3'>
+			<div className='flex items-center gap-2 border-b border-slate-200/70 bg-slate-50/85 px-3 pb-2 pt-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85'>
 				<Button
 					variant='ghost'
 					size='icon'
@@ -368,7 +409,7 @@ export default function Menu() {
 						placeholder='Qidirish...'
 						value={search}
 						onChange={e => setSearch(e.target.value)}
-						className='h-9 rounded-xl border-0 bg-accent/70 pl-9 pr-8 text-sm placeholder:text-muted-foreground/60 focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-primary/40 bg-transparent data-[state=open]:bg-accent focus-visible:outline-none'
+						className='h-9 rounded-xl border border-slate-200/80 bg-white/90 pl-9 pr-8 text-sm placeholder:text-slate-400 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:outline-none dark:border-slate-700/80 dark:bg-slate-800/80 dark:placeholder:text-slate-500 dark:focus-visible:bg-slate-800'
 					/>
 					{search && (
 						<button
@@ -381,24 +422,34 @@ export default function Menu() {
 					)}
 				</div>
 
-				<Button
-					variant='ghost'
-					size='icon'
-					className='size-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground'
-				>
-					<Edit3 className='size-4' />
-				</Button>
+				<Popover open={open} onOpenChange={setOpen}>
+					<PopoverTrigger asChild>
+						<Button
+							variant='ghost'
+							size='icon'
+							className='size-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground'
+						>
+							<Edit3 className='size-4' />
+						</Button>
+					</PopoverTrigger>
+					<PopoverContent className='w-56 p-2' align='start'>
+						<div className='flex flex-col gap-1'>
+							<CreateGroup onSuccess={() => setOpen(false)} />
+							<CreateChat onSuccess={() => setOpen(false)} />
+						</div>
+					</PopoverContent>
+				</Popover>
 			</div>
 
 			{/* ── Tabs ── */}
 			<div className='px-3 pb-2'>
 				<Tabs value={tab} onValueChange={setTab} className='w-full'>
-					<TabsList className='h-9 w-full gap-1 rounded-xl bg-accent/60 p-1'>
+					<TabsList className='h-9 w-full gap-1 rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80'>
 						<TabsTrigger
 							value='all'
 							className={cn(
 								'flex-1 gap-1.5 rounded-lg text-xs font-medium transition-all',
-								'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white',
+								'data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100',
 								'data-[state=inactive]:text-muted-foreground',
 							)}
 						>
@@ -415,7 +466,7 @@ export default function Menu() {
 							value='private'
 							className={cn(
 								'flex-1 gap-1.5 rounded-lg text-xs font-medium transition-all',
-								'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white',
+								'data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100',
 								'data-[state=inactive]:text-muted-foreground',
 							)}
 						>
@@ -432,7 +483,7 @@ export default function Menu() {
 							value='group'
 							className={cn(
 								'flex-1 gap-1.5 rounded-lg text-xs font-medium transition-all',
-								'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white',
+								'data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100',
 								'data-[state=inactive]:text-muted-foreground',
 							)}
 						>
@@ -448,7 +499,7 @@ export default function Menu() {
 				</Tabs>
 			</div>
 
-			<Separator className='opacity-50' />
+			<Separator className='bg-slate-200/70 opacity-100 dark:bg-slate-800' />
 
 			{/* ── Chat List ── */}
 			<div className='flex-1 overflow-hidden'>
@@ -460,7 +511,7 @@ export default function Menu() {
 					</div>
 				) : sorted.length === 0 ? (
 					<div className='flex h-full flex-col items-center justify-center gap-3 p-8 text-center'>
-						<div className='flex size-16 items-center justify-center rounded-2xl bg-accent'>
+						<div className='flex size-16 items-center justify-center rounded-2xl bg-slate-200 dark:bg-slate-800'>
 							<MessageCircle className='size-7 text-muted-foreground/50' />
 						</div>
 						<div className='space-y-1'>

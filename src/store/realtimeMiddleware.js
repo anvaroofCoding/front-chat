@@ -6,7 +6,12 @@ const CHAT_QUERY_ARGS = ['all', 'private', 'group']
 
 function normalizeId(id) {
 	if (!id) return ''
-	if (typeof id === 'string') return id
+	if (typeof id === 'string') {
+		const value = id.trim()
+		if (!value) return ''
+		if (value === 'undefined' || value === 'null') return ''
+		return value
+	}
 	if (typeof id === 'number') return String(id)
 	if (typeof id === 'object') return id._id || id.id || id.userId || ''
 	return ''
@@ -402,7 +407,7 @@ export const realtimeMiddleware = store => {
 
 			const me = getMeFromStore()
 			const myUserId = normalizeId(me?._id || localStorage.getItem('userId'))
-			if (userId === myUserId) return
+			if (myUserId && userId === myUserId) return
 
 			const name =
 				[data.firstname, data.lastname].filter(Boolean).join(' ') ||
@@ -552,6 +557,13 @@ export const realtimeMiddleware = store => {
 
 		// Every time getChats resolves, join any new conversation rooms
 		if (api.endpoints.getChats.matchFulfilled(action)) {
+			ensureSocketAuth()
+			bindSocketListeners()
+			store.dispatch(
+				socket.connected
+					? realtimeActions.socketConnected()
+					: realtimeActions.socketDisconnected(),
+			)
 			if (Array.isArray(action.payload)) {
 				joinAllRooms(action.payload)
 			}

@@ -8,17 +8,13 @@ import Menu from '@/elements/menu'
 
 export default function Telegram_Sidebar() {
 	return (
-		<ResizablePanelGroup
-			direction='horizontal'
-			autoSaveId='telegram-sidebar-layout'
-			className='h-screen w-full'
-		>
+		<ResizablePanelGroup direction='horizontal' className='h-screen w-full'>
 			<ResizablePanel
 				id='sidebar-panel'
 				order={1}
-				defaultSize={500}
-				minSize={400}
-				maxSize={600}
+				defaultSize={400}
+				minSize={200}
+				maxSize={400}
 				className='h-screen'
 			>
 				<div className='h-full border-r'>

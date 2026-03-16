@@ -1,12 +1,13 @@
 import { io } from 'socket.io-client'
 
-const URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+const URL = import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api\/?$/, '')
 
 export const socket = io(URL, {
 	autoConnect: true,
 	auth: { token: localStorage.getItem('token') || '' },
 	withCredentials: true,
-	transports: ['websocket'],
+	transports: ['websocket', 'polling'],
 })
 
 export function ensureSocketAuth() {

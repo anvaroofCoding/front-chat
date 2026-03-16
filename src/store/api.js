@@ -3,9 +3,10 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 // Define a service using a base URL and expected endpoints
 export const api = createApi({
 	reducerPath: 'api',
-	tagTypes: ['Messages'],
+	tagTypes: ['Messages', 'Chats'],
 	baseQuery: fetchBaseQuery({
-		baseUrl: 'http://88.88.150.150:5000/api',
+		baseUrl:
+			import.meta.env.VITE_API_URL || 'https://back-chat-97sy.onrender.com/api',
 		prepareHeaders: headers => {
 			const token = localStorage.getItem('token')
 			if (token) {
@@ -41,7 +42,7 @@ export const api = createApi({
 		}),
 		// User endpoints
 		getUsers: builder.query({
-			query: () => '/users',
+			query: (search = '') => `/users?search=${search}`,
 		}),
 		getUser: builder.query({
 			query: id => `/users/${id}`,
@@ -53,6 +54,20 @@ export const api = createApi({
 			query: (type = 'all') => `/conversations?type=${type}`,
 			// Tab almashganda eski data ko'rinib tursin, yangi kelguncha
 			keepUnusedDataFor: 60,
+			providesTags: (result, error, type = 'all') => {
+				const baseTags = [
+					{ type: 'Chats', id: 'LIST' },
+					{ type: 'Chats', id: `LIST-${type}` },
+				]
+				if (!Array.isArray(result)) return baseTags
+				return [
+					...baseTags,
+					...result
+						.map(chat => chat?._id)
+						.filter(Boolean)
+						.map(id => ({ type: 'Chats', id })),
+				]
+			},
 		}),
 		getMessages: builder.query({
 			query: id => `/messages/${id}`,
@@ -131,12 +146,25 @@ export const api = createApi({
 				url: `/messages/${messageId}/read`,
 				method: 'PUT',
 			}),
+			invalidatesTags: [{ type: 'Messages', id: 'LIST' }],
 		}),
 		markConversationRead: builder.mutation({
 			query: conversationId => ({
 				url: `/messages/conversations/${conversationId}/read`,
 				method: 'PUT',
 			}),
+			invalidatesTags: (result, error, conversationId) => {
+				const id = conversationId || result?.conversationId
+				const tags = [
+					{ type: 'Chats', id: 'LIST' },
+					{ type: 'Chats', id: 'LIST-all' },
+					{ type: 'Chats', id: 'LIST-private' },
+					{ type: 'Chats', id: 'LIST-group' },
+					{ type: 'Messages', id: 'LIST' },
+				]
+				if (id) tags.push({ type: 'Messages', id })
+				return tags
+			},
 		}),
 		createChat: builder.mutation({
 			query: chatData => ({
@@ -144,12 +172,43 @@ export const api = createApi({
 				method: 'POST',
 				body: chatData,
 			}),
+			invalidatesTags: [
+				{ type: 'Chats', id: 'LIST' },
+				{ type: 'Chats', id: 'LIST-all' },
+				{ type: 'Chats', id: 'LIST-private' },
+			],
+		}),
+		createGroup: builder.mutation({
+			query: chatData => ({
+				url: '/groups',
+				method: 'POST',
+				body: chatData,
+			}),
+			invalidatesTags: [
+				{ type: 'Chats', id: 'LIST' },
+				{ type: 'Chats', id: 'LIST-all' },
+				{ type: 'Chats', id: 'LIST-group' },
+			],
+		}),
+		addMembers: builder.mutation({
+			query: ({ chatData, id }) => ({
+				url: `/groups/${id}/members`,
+				method: 'POST',
+				body: chatData,
+			}),
+			invalidatesTags: [
+				{ type: 'Chats', id: 'LIST' },
+				{ type: 'Chats', id: 'LIST-all' },
+				{ type: 'Chats', id: 'LIST-group' },
+			],
 		}),
 	}),
 })
 
 // Export hooks for usage in functional components
 export const {
+	useAddMembersMutation,
+	useCreateGroupMutation,
 	useGetConversationsQuery,
 	useGetMeQuery,
 	useLoginMutation,

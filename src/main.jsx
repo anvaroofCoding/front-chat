@@ -8,7 +8,7 @@ import { StoreProvider } from './store/StoreProvider.jsx'
 
 createRoot(document.getElementById('root')).render(
 	<StrictMode>
-		<ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
+		<ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
 			<StoreProvider>
 				<Toaster position='top-right' richColors closeButton />
 				<App />

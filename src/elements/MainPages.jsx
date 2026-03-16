@@ -23,7 +23,6 @@ import {
 	Download,
 	FileText,
 	Mic,
-	MoreVertical,
 	Paperclip,
 	Pause,
 	Pencil,
@@ -43,6 +42,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import MoreVenticalInformation from './MoreVentical_information'
 
 /* ─────────────── Helpers ─────────────── */
 
@@ -247,6 +247,8 @@ const COLORS = [
 function avatarColor(name = '') {
 	return COLORS[(name.charCodeAt(0) || 0) % COLORS.length]
 }
+
+const EMPTY_TYPING_MAP = Object.freeze({})
 
 /* ─────────────── Media Lightbox (simple & fast) ─────────────── */
 
@@ -578,8 +580,8 @@ function AudioPlayer({ item, isMine }) {
 				className={cn(
 					'flex size-9 shrink-0 items-center justify-center rounded-full transition',
 					isMine
-						? 'bg-primary/25 text-primary hover:bg-primary/35'
-						: 'bg-muted text-foreground hover:bg-muted/80',
+						? 'bg-white/18 text-white hover:bg-white/26 dark:bg-sky-400/20 dark:text-sky-200 dark:hover:bg-sky-400/30'
+						: 'bg-white/14 text-white hover:bg-white/22 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600',
 				)}
 			>
 				{playing ? (
@@ -597,18 +599,20 @@ function AudioPlayer({ item, isMine }) {
 					<div
 						className={cn(
 							'h-full rounded-full transition-all',
-							isMine ? 'bg-primary' : 'bg-foreground/50',
+							isMine
+								? 'bg-white dark:bg-sky-300'
+								: 'bg-white/90 dark:bg-slate-300',
 						)}
 						style={{ width: `${progress}%` }}
 					/>
 				</div>
-				<div className='flex justify-between text-[10px] opacity-50'>
+				<div className='flex justify-between text-[10px] text-white/75 dark:text-slate-400'>
 					<span>{fmtDuration(current)}</span>
 					<span>{fmtDuration(duration)}</span>
 				</div>
 			</div>
 
-			<Volume2 className='size-3.5 shrink-0 opacity-30' />
+			<Volume2 className='size-3.5 shrink-0 text-white/70 dark:text-slate-400' />
 		</div>
 	)
 }
@@ -627,25 +631,31 @@ function FileChipBubble({ item, isMine }) {
 			target='_blank'
 			rel='noreferrer'
 			className={cn(
-				'flex items-center gap-2.5 rounded-xl px-3 py-2 transition',
+				'flex items-center gap-2.5 rounded-xl border px-3 py-2 transition hover:opacity-90',
 				isMine
-					? 'bg-primary/10 hover:bg-primary/20'
-					: 'bg-muted/60 hover:bg-muted',
+					? 'border-white/12 bg-white/10 text-white dark:border-sky-400/20 dark:bg-sky-400/15 dark:text-slate-100'
+					: 'border-white/10 bg-white/8 text-white dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100',
 			)}
 		>
 			<div
 				className={cn(
 					'flex size-9 shrink-0 items-center justify-center rounded-lg',
-					isMine ? 'bg-primary/15' : 'bg-background/60',
+					isMine
+						? 'bg-white/14 text-white dark:bg-sky-400/15 dark:text-sky-200'
+						: 'bg-white/12 text-white dark:bg-slate-700 dark:text-slate-200',
 				)}
 			>
-				<FileText className='size-4 text-primary' />
+				<FileText className='size-4' />
 			</div>
 			<div className='min-w-0 flex-1'>
 				<p className='truncate text-[13px] font-medium'>{name}</p>
-				{size && <p className='text-[11px] opacity-50'>{size}</p>}
+				{size && (
+					<p className='text-[11px] text-white/70 dark:text-slate-400'>
+						{size}
+					</p>
+				)}
 			</div>
-			<Download className='size-3.5 shrink-0 opacity-40' />
+			<Download className='size-3.5 shrink-0 opacity-50' />
 		</a>
 	)
 }
@@ -742,7 +752,7 @@ function CtxMenu({ x, y, message, myId, onReply, onCopy, onEdit, onDelete }) {
 						danger: true,
 					},
 				]
-					.filter(i => i.show)
+					.filter(item => item.show)
 					.map(({ icon: Icon, label, fn, danger }) => (
 						<button
 							key={label}
@@ -776,7 +786,9 @@ function MsgSkeleton({ mine }) {
 			<div
 				className={cn(
 					'max-w-[65%] space-y-1.5 rounded-2xl px-3.5 py-2.5',
-					mine ? 'rounded-br-sm bg-primary/10' : 'rounded-bl-sm bg-muted/60',
+					mine
+						? 'rounded-br-sm bg-[#1c4d8d] dark:bg-sky-400/15'
+						: 'rounded-bl-sm bg-[#162e4d] dark:bg-slate-800',
 				)}
 			>
 				{!mine && <Skeleton className='h-2.5 w-20 rounded-full' />}
@@ -800,12 +812,26 @@ function DateDivider({ label }) {
 	)
 }
 
+function getMessageKey(message) {
+	return normalizeId(message?._id || message?.id || message?.messageId)
+}
+
 /* ─────────────── Message Bubble ─────────────── */
 
-function MessageBubble({ message, isMine, onContextMenu, participantsById }) {
+function MessageBubble({
+	message,
+	isMine,
+	onContextMenu,
+	participantsById,
+	registerMessageRef,
+	onReplyJump,
+	isHighlighted,
+}) {
 	const [viewer, setViewer] = useState(null)
 	const text = getMsgText(message)
 	const all = getAllAttachments(message)
+	const messageId = getMessageKey(message)
+	const replyTargetId = getMessageKey(message?.replyTo)
 
 	const images = all.filter(a => classify(a) === 'image')
 	const videos = all.filter(a => classify(a) === 'video')
@@ -835,9 +861,12 @@ function MessageBubble({ message, isMine, onContextMenu, participantsById }) {
 			)}
 
 			<div
+				ref={node => registerMessageRef(messageId, node)}
 				className={cn(
-					'group flex w-full flex-col gap-1',
+					'group flex w-full flex-col gap-1 rounded-2xl transition-all duration-500',
 					isMine ? 'items-end' : 'items-start',
+					isHighlighted &&
+						'bg-amber-300/20 ring-2 ring-amber-400/60 ring-offset-2 ring-offset-background',
 				)}
 				onContextMenu={e => onContextMenu(e, message)}
 			>
@@ -910,20 +939,24 @@ function MessageBubble({ message, isMine, onContextMenu, participantsById }) {
 								className={cn(
 									'w-full space-y-2 rounded-2xl px-3.5 py-2.5 text-sm shadow-sm',
 									isMine
-										? 'rounded-br-sm bg-primary/[0.13] text-foreground ring-1 ring-primary/20'
-										: 'rounded-bl-sm bg-card text-foreground ring-1 ring-border/40',
+										? 'rounded-br-sm bg-[#1c4d8d] text-white ring-1 ring-[#1c4d8d]/90 dark:bg-sky-400/18 dark:text-slate-50 dark:ring-sky-400/25'
+										: 'rounded-bl-sm bg-[#162e4d] text-white ring-1 ring-[#162e4d]/90 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/80',
 								)}
 							>
 								{/* Reply preview */}
 								{message?.replyTo && (
-									<div className='rounded-lg border-l-[3px] border-primary bg-primary/5 px-2.5 py-1.5 text-xs'>
-										<p className='font-semibold text-primary'>
+									<button
+										type='button'
+										onClick={() => onReplyJump(replyTargetId)}
+										className='block w-full rounded-lg border-l-[3px] border-white/85 px-2.5 py-1.5 text-left text-xs text-white transition hover:bg-white/10 dark:border-sky-400 dark:text-slate-100 dark:hover:bg-white/5'
+									>
+										<p className='font-semibold text-white dark:text-sky-300'>
 											{message.replyTo?.sender?.firstname || 'Xabar'}
 										</p>
-										<p className='mt-0.5 truncate opacity-60'>
+										<p className='mt-0.5 truncate text-white/75 dark:text-slate-300'>
 											{message.replyTo?.text || '📎 Fayl'}
 										</p>
-									</div>
+									</button>
 								)}
 
 								{/* Audio players */}
@@ -946,12 +979,16 @@ function MessageBubble({ message, isMine, onContextMenu, participantsById }) {
 								{/* Time */}
 								<div className='flex items-center justify-end gap-1'>
 									{(message?.isEdited || message?.edited) && (
-										<span className='text-[10px] opacity-40'>tahrirlangan</span>
+										<span className='text-[10px] text-white/60 dark:text-slate-400'>
+											tahrirlangan
+										</span>
 									)}
-									<span className='text-[10px] tabular-nums opacity-50'>
+									<span className='text-[10px] tabular-nums text-white/75 dark:text-slate-400'>
 										{fmtTime(message?.createdAt)}
 									</span>
-									{isMine && <CheckCheck className='size-3 text-primary/70' />}
+									{isMine && (
+										<CheckCheck className='size-3 text-white/85 dark:text-sky-300' />
+									)}
 								</div>
 							</div>
 						)}
@@ -996,6 +1033,7 @@ export default function MainPages() {
 	const [pendingFiles, setPendingFiles] = useState([])
 	const [replyTo, setReplyTo] = useState(null)
 	const [editingMsg, setEditingMsg] = useState(null)
+	const [highlightedMessageId, setHighlightedMessageId] = useState('')
 	const [ctxMenu, setCtxMenu] = useState({
 		open: false,
 		x: 0,
@@ -1009,13 +1047,15 @@ export default function MainPages() {
 	const mediaRecRef = useRef(null)
 	const streamRef = useRef(null)
 	const chunksRef = useRef([])
+	const messageRefs = useRef(new Map())
+	const highlightTimeoutRef = useRef(null)
 	const typingTimeoutRef = useRef(null)
 	const isTypingRef = useRef(false)
 	const markReadTimeoutRef = useRef(null)
 	const myId = me?._id
 	const convId = normalizeId(chatId)
 	const typingMap = useSelector(
-		state => state.realtime.typingByConversation?.[convId] || {},
+		state => state.realtime.typingByConversation?.[convId] ?? EMPTY_TYPING_MAP,
 	)
 
 	const messages = useMemo(() => {
@@ -1166,8 +1206,12 @@ export default function MainPages() {
 	}, [chatId])
 
 	useEffect(() => {
+		const highlightTimeout = highlightTimeoutRef.current
 		return () => {
 			stopTyping()
+			if (highlightTimeout) {
+				clearTimeout(highlightTimeout)
+			}
 			if (markReadTimeoutRef.current) clearTimeout(markReadTimeoutRef.current)
 		}
 	}, [stopTyping])
@@ -1352,6 +1396,35 @@ export default function MainPages() {
 		setCtxMenu(p => ({ ...p, open: false }))
 	}
 
+	const registerMessageRef = (messageId, node) => {
+		if (!messageId) return
+		if (node) {
+			messageRefs.current.set(messageId, node)
+			return
+		}
+		messageRefs.current.delete(messageId)
+	}
+
+	const handleReplyJump = targetMessageId => {
+		if (!targetMessageId) return
+		const targetNode = messageRefs.current.get(targetMessageId)
+		if (!targetNode) return
+
+		targetNode.scrollIntoView({ behavior: 'smooth', block: 'center' })
+		setHighlightedMessageId(targetMessageId)
+
+		if (highlightTimeoutRef.current) {
+			clearTimeout(highlightTimeoutRef.current)
+		}
+
+		highlightTimeoutRef.current = setTimeout(() => {
+			setHighlightedMessageId(current =>
+				current === targetMessageId ? '' : current,
+			)
+			highlightTimeoutRef.current = null
+		}, 1800)
+	}
+
 	if (!chatId) {
 		return (
 			<div className='flex h-full flex-col items-center justify-center gap-4 bg-background p-8'>
@@ -1384,6 +1457,44 @@ export default function MainPages() {
 	const resolvedConvTitle = getConvTitle(conversation, myId)
 	const isGroup = conversation?.type === 'group'
 	const memberCount = conversation?.members?.length
+
+	const showOnlyGroupToast = title => {
+		if (isGroup) {
+			toast(title)
+			return
+		}
+		toast.info('Bu amal faqat guruh chatlar uchun')
+	}
+
+	const handleGroupInfo = () => {
+		showOnlyGroupToast("Guruh haqida bo'limi tez orada qo'shiladi")
+	}
+
+	const handleAddMembers = () => {
+		showOnlyGroupToast("A'zo qo'shish oynasi tez orada qo'shiladi")
+	}
+
+	const handleEditGroup = () => {
+		showOnlyGroupToast("Guruhni tahrirlash funksiyasi tez orada qo'shiladi")
+	}
+
+	const handleViewMembers = () => {
+		showOnlyGroupToast("A'zolar ro'yxati tez orada qo'shiladi")
+	}
+
+	const handleDeleteGroup = () => {
+		if (isGroup) {
+			toast.warning(
+				"Guruhni o'chirish uchun tasdiqlash oynasi tez orada qo'shiladi",
+			)
+			return
+		}
+		toast.warning("Chatni o'chirish funksiyasi tez orada qo'shiladi")
+	}
+
+	const handleClearHistory = () => {
+		toast.warning("History tozalash funksiyasi tez orada qo'shiladi")
+	}
 
 	return (
 		<div className='relative flex h-full flex-col bg-background text-foreground'>
@@ -1433,13 +1544,15 @@ export default function MainPages() {
 						>
 							<Search className='size-4' />
 						</Button>
-						<Button
-							variant='ghost'
-							size='icon'
-							className='size-9 rounded-xl text-muted-foreground hover:text-foreground'
-						>
-							<MoreVertical className='size-4' />
-						</Button>
+						<MoreVenticalInformation
+							isGroup={isGroup}
+							onGroupInfo={handleGroupInfo}
+							onAddMembers={handleAddMembers}
+							onEditGroup={handleEditGroup}
+							onViewMembers={handleViewMembers}
+							onDeleteGroup={handleDeleteGroup}
+							onClearHistory={handleClearHistory}
+						/>
 					</>
 				)}
 			</div>
@@ -1492,6 +1605,11 @@ export default function MainPages() {
 										}
 										participantsById={participantsById}
 										onContextMenu={onMsgCtx}
+										registerMessageRef={registerMessageRef}
+										onReplyJump={handleReplyJump}
+										isHighlighted={
+											highlightedMessageId === getMessageKey(item.data)
+										}
 									/>
 								),
 							)
