@@ -91,6 +91,36 @@ function upsertMessageList(draft, message) {
 	)
 }
 
+function patchMessageInList(draft, payload) {
+	if (!Array.isArray(draft) || !payload) return
+	const messageId = normalizeId(
+		payload?.messageId || payload?._id || payload?.message?._id,
+	)
+	if (!messageId) return
+
+	const index = draft.findIndex(item => getMessageId(item) === messageId)
+	if (index < 0) return
+
+	draft[index] = {
+		...draft[index],
+		...payload,
+		_id: draft[index]?._id || messageId,
+		id: draft[index]?.id || messageId,
+	}
+}
+
+function removeMessageFromList(draft, payload) {
+	if (!Array.isArray(draft) || !payload) return
+	const messageId = normalizeId(
+		payload?.messageId || payload?._id || payload?.message?._id,
+	)
+	if (!messageId) return
+
+	const index = draft.findIndex(item => getMessageId(item) === messageId)
+	if (index < 0) return
+	draft.splice(index, 1)
+}
+
 function markMessageReadInList(draft, messageId) {
 	if (!Array.isArray(draft) || !messageId) return
 	const index = draft.findIndex(item => getMessageId(item) === messageId)
@@ -517,6 +547,44 @@ export const realtimeMiddleware = store => {
 			refetchChatLists()
 		}
 
+		const onMessageUpdated = payload => {
+			const data = unwrapSocketPayload(payload) || payload
+			const conversationId = normalizeId(
+				data?.conversationId ||
+					data?.conversation?._id ||
+					data?.conversation ||
+					data?.chatId,
+			)
+			if (!conversationId) return
+
+			store.dispatch(
+				api.util.updateQueryData('getMessages', conversationId, draft => {
+					patchMessageInList(draft, data)
+				}),
+			)
+			refetchMessages(conversationId)
+			refetchChatLists()
+		}
+
+		const onMessageDeleted = payload => {
+			const data = unwrapSocketPayload(payload) || payload
+			const conversationId = normalizeId(
+				data?.conversationId ||
+					data?.conversation?._id ||
+					data?.conversation ||
+					data?.chatId,
+			)
+			if (!conversationId) return
+
+			store.dispatch(
+				api.util.updateQueryData('getMessages', conversationId, draft => {
+					removeMessageFromList(draft, data)
+				}),
+			)
+			refetchMessages(conversationId)
+			refetchChatLists()
+		}
+
 		socket.on('connect', onConnect)
 		socket.on('disconnect', onDisconnect)
 		socket.on('message:new', onIncomingMessage)
@@ -525,6 +593,10 @@ export const realtimeMiddleware = store => {
 		socket.on('message', onIncomingMessage)
 		socket.on('message:read', onMessageRead)
 		socket.on('conversation:read', onConversationRead)
+		socket.on('message:updated', onMessageUpdated)
+		socket.on('message_edited', onMessageUpdated)
+		socket.on('message:deleted', onMessageDeleted)
+		socket.on('message_deleted', onMessageDeleted)
 		socket.on('typing', onTyping)
 		socket.on('typing:start', onTypingStart)
 		socket.on('typing:stop', onTypingStop)
