@@ -387,33 +387,6 @@ export const realtimeMiddleware = store => {
 			store.dispatch(realtimeActions.socketDisconnected())
 		}
 
-		const onIncomingMessage = payload => {
-			const message = payload?.message || payload
-			const dedupKey = getMessageDedupKey(message)
-			if (rememberProcessedMessage(dedupKey)) return
-
-			const conversationId = getMessageConversationId(message)
-			const me = getMeFromStore()
-			const myUserId = normalizeId(me?._id || localStorage.getItem('userId'))
-			const senderId = getMessageSenderId(message)
-
-			if (conversationId && senderId && senderId !== myUserId) {
-				clearTypingTimer(conversationId, senderId)
-				store.dispatch(
-					realtimeActions.userStoppedTyping({
-						conversationId,
-						userId: senderId,
-					}),
-				)
-			}
-
-			if (conversationId) {
-				store.dispatch(realtimeActions.messageReceived({ conversationId }))
-			}
-			syncCachesFromIncomingMessage(message)
-			refetchChatLists()
-		}
-
 		const onTyping = payload => {
 			const data = unwrapSocketPayload(payload)
 			if (!data) return
@@ -587,10 +560,6 @@ export const realtimeMiddleware = store => {
 
 		socket.on('connect', onConnect)
 		socket.on('disconnect', onDisconnect)
-		socket.on('message:new', onIncomingMessage)
-		socket.on('receive_message', onIncomingMessage)
-		socket.on('new_message', onIncomingMessage)
-		socket.on('message', onIncomingMessage)
 		socket.on('message:read', onMessageRead)
 		socket.on('conversation:read', onConversationRead)
 		socket.on('message:updated', onMessageUpdated)

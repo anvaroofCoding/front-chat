@@ -4,9 +4,10 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { socket } from '@/elements/socket'
+import { ensureSocketAuth, socket } from '@/elements/socket'
 import { cn } from '@/lib/utils'
 import {
+	api,
 	useDeleteMessageMutation,
 	useGetConversationsQuery,
 	useGetMeQuery,
@@ -71,6 +72,41 @@ function getInitialsFromName(name = '') {
 	if (!parts.length) return '?'
 	if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase()
 	return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+}
+
+function getMessageId(message) {
+	return message?._id || message?.id || message?.messageId || ''
+}
+
+function getMessageConversationId(message) {
+	return normalizeId(
+		message?.conversationId ||
+			message?.conversation?._id ||
+			message?.conversation ||
+			message?.chatId ||
+			message?.roomId ||
+			message?.room?._id ||
+			message?.room,
+	)
+}
+
+function upsertRealtimeMessage(draft, message) {
+	if (!Array.isArray(draft) || !message) return
+	const messageId = getMessageId(message)
+	if (!messageId) return
+
+	const index = draft.findIndex(item => getMessageId(item) === messageId)
+	if (index >= 0) {
+		draft[index] = { ...draft[index], ...message }
+	} else {
+		draft.push(message)
+	}
+
+	draft.sort(
+		(a, b) =>
+			new Date(a?.createdAt || 0).getTime() -
+			new Date(b?.createdAt || 0).getTime(),
+	)
 }
 
 function fmtTime(v) {
@@ -1153,6 +1189,38 @@ export default function MainPages() {
 		dispatch(realtimeActions.setActiveConversation(convId || ''))
 		return () => {
 			dispatch(realtimeActions.clearActiveConversation())
+		}
+	}, [convId, dispatch])
+
+	useEffect(() => {
+		if (!convId) return
+
+		ensureSocketAuth()
+		socket.emit('join_conversation', { conversationId: convId })
+
+		const handleIncomingMessage = payload => {
+			const message = payload?.message || payload
+			if (!message) return
+
+			const incomingConversationId = getMessageConversationId(message)
+			if (!incomingConversationId || incomingConversationId !== convId) return
+
+			dispatch(
+				api.util.updateQueryData('getMessages', convId, draft => {
+					upsertRealtimeMessage(draft, message)
+				}),
+			)
+		}
+
+		socket.on('message:new', handleIncomingMessage)
+		socket.on('new_message', handleIncomingMessage)
+		socket.on('receive_message', handleIncomingMessage)
+
+		return () => {
+			socket.off('message:new', handleIncomingMessage)
+			socket.off('new_message', handleIncomingMessage)
+			socket.off('receive_message', handleIncomingMessage)
+			socket.emit('leave_conversation', { conversationId: convId })
 		}
 	}, [convId, dispatch])
 
