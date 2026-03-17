@@ -136,9 +136,9 @@ function fmtDateLabel(v) {
 }
 
 function fmtDuration(sec) {
-	if (!sec || isNaN(sec)) return '0:00'
-	const m = Math.floor(sec / 60)
-	const s = Math.floor(sec % 60)
+	if (!sec || isNaN(sec) || !isFinite(sec)) return '0:00'
+	const m = Math.floor(Math.max(0, sec) / 60)
+	const s = Math.floor(Math.max(0, sec) % 60)
 	return `${m}:${String(s).padStart(2, '0')}`
 }
 
@@ -585,10 +585,14 @@ function AudioPlayer({ item, isMine }) {
 	}
 
 	const seek = e => {
-		if (!audioRef.current || !duration) return
+		if (!audioRef.current || !duration || isNaN(duration) || !isFinite(duration)) return
 		const rect = e.currentTarget.getBoundingClientRect()
-		audioRef.current.currentTime =
-			((e.clientX - rect.left) / rect.width) * duration
+		const clickX = e.clientX - rect.left
+		const width = rect.width
+		if (width > 0) {
+			const newTime = (clickX / width) * duration
+			audioRef.current.currentTime = Math.max(0, Math.min(newTime, duration))
+		}
 	}
 
 	const handleVolumeChange = e => {
@@ -612,12 +616,19 @@ function AudioPlayer({ item, isMine }) {
 					src={url}
 					onTimeUpdate={() => {
 						const a = audioRef.current
-						if (a) {
-							setCurrent(a.currentTime)
-							setProgress(a.duration ? (a.currentTime / a.duration) * 100 : 0)
+						if (a && a.duration && !isNaN(a.duration) && isFinite(a.duration)) {
+							const currentTime = a.currentTime || 0
+							const duration = a.duration || 0
+							setCurrent(currentTime)
+							setProgress(duration > 0 ? (currentTime / duration) * 100 : 0)
 						}
 					}}
-					onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+					onLoadedMetadata={() => {
+						const a = audioRef.current
+						if (a && a.duration && !isNaN(a.duration) && isFinite(a.duration)) {
+							setDuration(a.duration)
+						}
+					}}
 					onEnded={() => {
 						setPlaying(false)
 						setProgress(0)
@@ -993,7 +1004,10 @@ function MessageBubble({
 
 	// Does this message need a bubble? (text / audio / files / reply / caption)
 	const hasBubble =
-		text || audios.length > 0 || files.length > 0 || message?.replyTo
+		text || files.length > 0 || message?.replyTo
+
+	// Check if audio should be standalone (no bubble)
+	const hasStandaloneAudio = audios.length > 0 && !hasBubble
 
 	const senderId = normalizeId(message?.sender?._id || message?.sender)
 	const senderFromMembers = participantsById?.[senderId]
@@ -1073,6 +1087,13 @@ function MessageBubble({
 							</div>
 						)}
 
+						{/* ── Standalone Audio (NO bubble) ── */}
+						{hasStandaloneAudio && audios.map((a, i) => (
+							<div key={i} className="w-full max-w-[400px]">
+								<AudioPlayer item={a} isMine={isMine} />
+							</div>
+						))}
+
 						{/* ── Videos (NO bubble, bare) ── */}
 						{videos.map((v, i) => (
 							<div key={i} className='w-full overflow-hidden rounded-2xl'>
@@ -1118,7 +1139,7 @@ function MessageBubble({
 									</button>
 								)}
 
-								{/* Audio players */}
+								{/* Audio players inside bubble */}
 								{audios.map((a, i) => (
 									<AudioPlayer key={i} item={a} isMine={isMine} />
 								))}
@@ -1153,7 +1174,7 @@ function MessageBubble({
 						)}
 
 						{/* Time when ONLY media (no bubble) */}
-						{!hasBubble && (images.length > 0 || videos.length > 0) && (
+						{!hasBubble && (images.length > 0 || videos.length > 0 || hasStandaloneAudio) && (
 							<div
 								className={cn(
 									'flex items-center gap-1 px-1',
