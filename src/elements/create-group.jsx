@@ -63,7 +63,7 @@ export default function CreateGroup({ onSuccess }) {
 							<Input
 								id='group-name'
 								name='name'
-								placeholder='Frontend jamoasi'
+								placeholder='Guruh nomi yozing...'
 							/>
 						</Field>
 						<Field>

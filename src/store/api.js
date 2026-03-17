@@ -179,6 +179,9 @@ export const api = createApi({
 				{ type: 'Chats', id: 'LIST-private' },
 			],
 		}),
+
+
+		// group
 		createGroup: builder.mutation({
 			query: chatData => ({
 				url: '/groups',
@@ -191,6 +194,20 @@ export const api = createApi({
 				{ type: 'Chats', id: 'LIST-group' },
 			],
 		}),
+		editGroup: builder.mutation({
+			query: ({ chatData, id }) => ({
+				url: `/groups/${id}`,
+				method: 'PUT',
+				body: chatData,
+			}),
+			invalidatesTags: [
+				{ type: 'Chats', id: 'LIST' },
+				{ type: 'Chats', id: 'LIST-all' },
+				{ type: 'Chats', id: 'LIST-group' },
+			],
+		}),
+
+		// group members
 		addMembers: builder.mutation({
 			query: ({ chatData, id }) => ({
 				url: `/groups/${id}/members`,
@@ -216,6 +233,7 @@ export const api = createApi({
 
 // Export hooks for usage in functional components
 export const {
+	useEditGroupMutation,
 	useAddMembersMutation,
 	useCreateGroupMutation,
 	useGetConversationsQuery,

@@ -570,6 +570,8 @@ function AudioPlayer({ item, isMine }) {
 	const [progress, setProgress] = useState(0)
 	const [duration, setDuration] = useState(0)
 	const [current, setCurrent] = useState(0)
+	const [volume, setVolume] = useState(1)
+	const [showVolume, setShowVolume] = useState(false)
 
 	const toggle = () => {
 		if (!audioRef.current) return
@@ -589,8 +591,21 @@ function AudioPlayer({ item, isMine }) {
 			((e.clientX - rect.left) / rect.width) * duration
 	}
 
+	const handleVolumeChange = e => {
+		const vol = parseFloat(e.target.value)
+		setVolume(vol)
+		if (audioRef.current) {
+			audioRef.current.volume = vol
+		}
+	}
+
 	return (
-		<div className='flex w-full min-w-[200px] items-center gap-2.5'>
+		<div className={cn(
+			'flex w-full min-w-[280px] items-center gap-3 rounded-2xl p-3 shadow-sm',
+			isMine 
+				? 'bg-gradient-to-r from-sky-500/20 to-blue-600/20 border border-sky-400/30' 
+				: 'bg-gradient-to-r from-slate-700/50 to-slate-600/50 border border-slate-600/30'
+		)}>
 			{url && (
 				<audio
 					ref={audioRef}
@@ -611,45 +626,90 @@ function AudioPlayer({ item, isMine }) {
 				/>
 			)}
 
+			{/* Play/Pause button */}
 			<button
 				type='button'
 				onClick={toggle}
 				className={cn(
-					'flex size-9 shrink-0 items-center justify-center rounded-full transition',
+					'flex size-11 shrink-0 items-center justify-center rounded-full transition-all transform hover:scale-105',
 					isMine
-						? 'bg-white/18 text-white hover:bg-white/26 dark:bg-sky-400/20 dark:text-sky-200 dark:hover:bg-sky-400/30'
-						: 'bg-white/14 text-white hover:bg-white/22 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600',
+						? 'bg-sky-500 text-white hover:bg-sky-600 shadow-lg'
+						: 'bg-slate-600 text-white hover:bg-slate-700 shadow-lg',
 				)}
 			>
 				{playing ? (
-					<Pause className='size-4' />
+					<Pause className='size-5' />
 				) : (
-					<Play className='ml-0.5 size-4' />
+					<Play className='ml-0.5 size-5' />
 				)}
 			</button>
 
-			<div className='flex flex-1 flex-col gap-1'>
+			{/* Progress section */}
+			<div className='flex flex-1 flex-col gap-2'>
+				{/* Progress bar */}
 				<div
-					className='relative h-1.5 cursor-pointer overflow-hidden rounded-full bg-current/20'
+					className='relative h-2 cursor-pointer overflow-hidden rounded-full bg-black/20 dark:bg-white/20'
 					onClick={seek}
 				>
 					<div
 						className={cn(
-							'h-full rounded-full transition-all',
+							'h-full rounded-full transition-all relative',
 							isMine
-								? 'bg-white dark:bg-sky-300'
-								: 'bg-white/90 dark:bg-slate-300',
+								? 'bg-gradient-to-r from-sky-400 to-blue-500'
+								: 'bg-gradient-to-r from-slate-400 to-slate-500',
 						)}
 						style={{ width: `${progress}%` }}
-					/>
+					>
+						<div className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-md" />
+					</div>
 				</div>
-				<div className='flex justify-between text-[10px] text-white/75 dark:text-slate-400'>
-					<span>{fmtDuration(current)}</span>
-					<span>{fmtDuration(duration)}</span>
+				
+				{/* Time display */}
+				<div className='flex justify-between text-xs font-medium'>
+					<span className={isMine ? 'text-sky-700 dark:text-sky-300' : 'text-slate-300'}>
+						{fmtDuration(current)}
+					</span>
+					<span className={isMine ? 'text-sky-700 dark:text-sky-300' : 'text-slate-300'}>
+						{fmtDuration(duration)}
+					</span>
 				</div>
 			</div>
 
-			<Volume2 className='size-3.5 shrink-0 text-white/70 dark:text-slate-400' />
+			{/* Volume control */}
+			<div className="relative">
+				<button
+					type="button"
+					onClick={() => setShowVolume(!showVolume)}
+					className={cn(
+						'flex size-8 items-center justify-center rounded-full transition-all',
+						isMine 
+							? 'text-sky-600 hover:bg-sky-100 dark:text-sky-400 dark:hover:bg-sky-900/20' 
+							: 'text-slate-400 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
+					)}
+				>
+					<Volume2 className='size-4' />
+				</button>
+				
+				{showVolume && (
+					<div className={cn(
+						'absolute bottom-full right-0 mb-2 p-2 rounded-lg shadow-lg border',
+						isMine 
+							? 'bg-sky-50 border-sky-200 dark:bg-sky-900/50 dark:border-sky-700' 
+							: 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-600'
+					)}>
+						<input
+							type="range"
+							min="0"
+							max="1"
+							step="0.1"
+							value={volume}
+							onChange={handleVolumeChange}
+							className="w-20 h-1 accent-sky-500"
+							orient="vertical"
+						/>
+					</div>
+				)}
+			</div>
 		</div>
 	)
 }
@@ -726,36 +786,88 @@ function PendingChip({ file, onRemove }) {
 
 function RecordingBar({ onStop, onCancel }) {
 	const [secs, setSecs] = useState(0)
+	const [pulseIntensity, setPulseIntensity] = useState(1)
+	
 	useEffect(() => {
 		const t = setInterval(() => setSecs(s => s + 1), 1000)
 		return () => clearInterval(t)
 	}, [])
+
+	useEffect(() => {
+		const pulseInterval = setInterval(() => {
+			setPulseIntensity(prev => prev === 1 ? 1.2 : 1)
+		}, 800)
+		return () => clearInterval(pulseInterval)
+	}, [])
+
 	const mm = String(Math.floor(secs / 60)).padStart(2, '0')
 	const ss = String(secs % 60).padStart(2, '0')
+	
 	return (
-		<div className='flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2'>
-			<span className='relative flex size-2.5'>
-				<span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75' />
-				<span className='relative inline-flex size-2.5 rounded-full bg-destructive' />
-			</span>
-			<span className='flex-1 text-sm font-medium tabular-nums text-destructive'>
-				{mm}:{ss} — yozilmoqda
-			</span>
-			<button
-				type='button'
-				onClick={onCancel}
-				className='rounded-full p-1 text-muted-foreground hover:text-foreground'
-			>
-				<X className='size-4' />
-			</button>
-			<Button
-				size='sm'
-				variant='destructive'
-				onClick={onStop}
-				className='h-7 gap-1.5 px-2.5 text-xs'
-			>
-				<StopCircle className='size-3.5' /> Yuborish
-			</Button>
+		<div className='relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-500/20 to-pink-500/20 border border-red-400/30 p-4 shadow-lg backdrop-blur-sm'>
+			{/* Animated background effect */}
+			<div className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-pink-500/10 animate-pulse" />
+			
+			<div className='relative flex items-center gap-4'>
+				{/* Recording indicator with enhanced animation */}
+				<div className='flex items-center gap-3'>
+					<div className='relative'>
+						<span 
+							className='flex size-4 animate-ping rounded-full bg-red-500 opacity-75' 
+							style={{ 
+								animationDuration: '1.5s',
+								transform: `scale(${pulseIntensity})`
+							}} 
+						/>
+						<div className='relative flex size-4 items-center justify-center rounded-full bg-red-500 shadow-lg'>
+							<div className="size-2 rounded-full bg-white animate-pulse" />
+						</div>
+					</div>
+					
+					{/* Waveform visualization */}
+					<div className="flex items-center gap-1">
+						<div className="w-1 h-4 bg-red-400 rounded-full animate-pulse" style={{ animationDelay: '0s' }} />
+						<div className="w-1 h-6 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+						<div className="w-1 h-3 bg-red-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+						<div className="w-1 h-5 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: '0.6s' }} />
+						<div className="w-1 h-4 bg-red-400 rounded-full animate-pulse" style={{ animationDelay: '0.8s' }} />
+					</div>
+				</div>
+
+				{/* Timer and status */}
+				<div className='flex-1'>
+					<div className='flex items-center gap-2'>
+						<span className='text-lg font-bold text-red-600 dark:text-red-400 tabular-nums'>
+							{mm}:{ss}
+						</span>
+						<span className='text-sm font-medium text-red-500 dark:text-red-400'>
+							yozilmoqda
+						</span>
+					</div>
+					<div className="text-xs text-red-400/70 dark:text-red-300/70 mt-1">
+						Ovoz yozish davom etmoqda...
+					</div>
+				</div>
+
+				{/* Action buttons */}
+				<div className='flex items-center gap-2'>
+					<button
+						type='button'
+						onClick={onCancel}
+						className='flex size-10 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition-all transform hover:scale-105 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300 dark:hover:text-white'
+					>
+						<X className='size-5' />
+					</button>
+					<Button
+						size='sm'
+						onClick={onStop}
+						className='h-10 gap-2 px-4 bg-red-500 hover:bg-red-600 text-white font-medium shadow-lg transition-all transform hover:scale-105 rounded-full'
+					>
+						<StopCircle className='size-4' />
+						Yuborish
+					</Button>
+				</div>
+			</div>
 		</div>
 	)
 }
@@ -863,6 +975,9 @@ function MessageBubble({
 	registerMessageRef,
 	onReplyJump,
 	isHighlighted,
+	showSenderName,
+	showAvatar,
+	isGrouped,
 }) {
 	const [viewer, setViewer] = useState(null)
 	const text = getMsgText(message)
@@ -904,6 +1019,7 @@ function MessageBubble({
 					isMine ? 'items-end' : 'items-start',
 					isHighlighted &&
 						'bg-amber-300/20 ring-2 ring-amber-400/60 ring-offset-2 ring-offset-background',
+					isGrouped && !isMine && 'ml-8', // Add margin for grouped messages
 				)}
 				onContextMenu={e => onContextMenu(e, message)}
 			>
@@ -912,12 +1028,13 @@ function MessageBubble({
 					className={cn(
 						'flex w-full items-end gap-2',
 						isMine ? 'justify-end' : 'justify-start',
+						isGrouped && !isMine && 'gap-1', // Reduce gap for grouped messages
 					)}
 				>
-					{/* Avatar (others only) */}
-					{!isMine && (
+					{/* Avatar (others only, show only for first message in group) */}
+					{!isMine && showAvatar && (
 						<div className='mb-1 shrink-0'>
-							<Avatar className='size-8 ring-1 ring-border/40'>
+							<Avatar className='size-6 ring-1 ring-border/40'>
 								<AvatarImage src={senderAvatar} />
 								<AvatarFallback
 									className={cn(
@@ -934,12 +1051,13 @@ function MessageBubble({
 					{/* Content column */}
 					<div
 						className={cn(
-							'flex max-w-[72%] flex-col gap-1',
+							'flex max-w-[72%] flex-col gap-1 ',
 							isMine ? 'items-end' : 'items-start',
+							isGrouped && !isMine && 'ml-0', // Remove margin for grouped messages
 						)}
 					>
-						{/* Sender name (groups, others) */}
-						{!isMine && senderName && (
+						{/* Sender name (groups, others, show only for first message in group) */}
+						{!isMine && showSenderName && senderName && (
 							<p className='px-1 text-[11px] font-semibold text-primary'>
 								{senderName}
 							</p>
@@ -978,6 +1096,7 @@ function MessageBubble({
 									isMine
 										? 'rounded-br-sm bg-[#1c4d8d] text-white ring-1 ring-[#1c4d8d]/90 dark:bg-sky-400/18 dark:text-slate-50 dark:ring-sky-400/25'
 										: 'rounded-bl-sm bg-[#162e4d] text-white ring-1 ring-[#162e4d]/90 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/80',
+									isGrouped && !isMine && 'rounded-tl-sm', // Adjust border radius for grouped messages
 								)}
 							>
 								{/* Reply preview */}
@@ -985,13 +1104,16 @@ function MessageBubble({
 									<button
 										type='button'
 										onClick={() => onReplyJump(replyTargetId)}
-										className='block w-full rounded-lg border-l-[3px] border-white/85 px-2.5 py-1.5 text-left text-xs text-white transition hover:bg-white/10 dark:border-sky-400 dark:text-slate-100 dark:hover:bg-white/5'
+										className='block w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-left text-xs text-white transition-all hover:bg-white/20 dark:border-sky-400/30 dark:bg-sky-400/10 dark:hover:bg-sky-400/20'
 									>
-										<p className='font-semibold text-white dark:text-sky-300'>
-											{message.replyTo?.sender?.firstname || 'Xabar'}
-										</p>
-										<p className='mt-0.5 truncate text-white/75 dark:text-slate-300'>
-											{message.replyTo?.text || '📎 Fayl'}
+										<div className='flex items-center gap-2 mb-1'>
+											<Reply className='size-3 opacity-70' />
+											<span className='font-semibold text-white dark:text-sky-200'>
+												{getFullName(message.replyTo?.sender) || 'Foydalanuvchi'}
+											</span>
+										</div>
+										<p className='truncate text-white/80 dark:text-slate-200'>
+											{getMsgText(message.replyTo) || '📎 Fayl yoki media'}
 										</p>
 									</button>
 								)}
@@ -1107,22 +1229,55 @@ export default function MainPages() {
 	}, [messagesData])
 
 	const grouped = useMemo(() => {
-		const result = []
-		let lastDate = null
-		for (const msg of messages) {
-			const d = msg?.createdAt ? new Date(msg.createdAt).toDateString() : null
-			if (d && d !== lastDate) {
-				result.push({
-					type: 'date',
-					label: fmtDateLabel(msg.createdAt),
-					key: `d-${d}`,
-				})
-				lastDate = d
+	const result = []
+	let lastDate = null
+	let lastSenderId = null
+	let messageGroup = []
+	
+	for (let i = 0; i < messages.length; i++) {
+		const msg = messages[i]
+		const d = msg?.createdAt ? new Date(msg.createdAt).toDateString() : null
+		const senderId = normalizeId(msg?.sender?._id || msg?.sender)
+		
+		// Add date divider if needed
+		if (d && d !== lastDate) {
+			if (messageGroup.length > 0) {
+				result.push(...messageGroup)
+				messageGroup = []
 			}
-			result.push({ type: 'msg', data: msg, key: msg._id })
+			result.push({
+				type: 'date',
+				label: fmtDateLabel(msg.createdAt),
+				key: `d-${d}`,
+			})
+			lastDate = d
 		}
-		return result
-	}, [messages])
+		
+		// Check if this is a new sender or first message
+		const isNewSender = senderId !== lastSenderId
+		const isFirstMessage = i === 0
+		
+		// Add message with grouping info
+		const messageItem = {
+			type: 'msg',
+			data: msg,
+			key: msg._id,
+			showSenderName: isNewSender && senderId !== normalizeId(myId) && conversation?.type === 'group',
+			showAvatar: isNewSender && senderId !== normalizeId(myId),
+			isGrouped: !isNewSender && senderId !== normalizeId(myId),
+		}
+		
+		messageGroup.push(messageItem)
+		lastSenderId = senderId
+	}
+	
+	// Add remaining messages
+	if (messageGroup.length > 0) {
+		result.push(...messageGroup)
+	}
+	
+	return result
+}, [messages, myId, conversation?.type])
 
 	const participantsById = useMemo(
 		() => buildParticipantsMap(conversation),
@@ -1694,6 +1849,9 @@ export default function MainPages() {
 										isHighlighted={
 											highlightedMessageId === getMessageKey(item.data)
 										}
+										showSenderName={item.showSenderName}
+										showAvatar={item.showAvatar}
+										isGrouped={item.isGrouped}
 									/>
 								),
 							)
@@ -1726,21 +1884,37 @@ export default function MainPages() {
 				)}
 
 				{replyTo && (
-					<div className='flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2'>
-						<div className='w-0.5 shrink-0 self-stretch rounded-full bg-primary' />
-						<div className='min-w-0 flex-1 text-xs'>
-							<p className='font-semibold text-primary'>Javob</p>
-							<p className='truncate opacity-60'>
-								{getMsgText(replyTo) || '📎 Fayl'}
-							</p>
+					<div className='relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 p-3 shadow-sm backdrop-blur-sm'>
+						{/* Gradient accent line */}
+						<div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-primary/60" />
+						
+						<div className='flex items-start gap-3'>
+							<div className='flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20'>
+								<Reply className='size-4 text-primary' />
+							</div>
+							
+							<div className='min-w-0 flex-1'>
+								<div className='flex items-center gap-2 mb-1'>
+									<span className='text-xs font-semibold text-primary'>
+										Javob berish
+									</span>
+									<span className='text-xs text-muted-foreground'>
+										{getFullName(replyTo?.sender) || 'Foydalanuvchi'}
+									</span>
+								</div>
+								<p className='text-sm text-muted-foreground truncate'>
+									{getMsgText(replyTo) || '📎 Fayl yoki media'}
+								</p>
+							</div>
+							
+							<button
+								type='button'
+								onClick={() => setReplyTo(null)}
+								className='flex size-6 shrink-0 items-center justify-center rounded-full bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all'
+							>
+								<X className='size-3.5' />
+							</button>
 						</div>
-						<button
-							type='button'
-							onClick={() => setReplyTo(null)}
-							className='rounded-full p-1 text-muted-foreground hover:text-foreground'
-						>
-							<X className='size-3.5' />
-						</button>
 					</div>
 				)}
 
@@ -1799,7 +1973,7 @@ export default function MainPages() {
 								}
 							}}
 							placeholder='Xabar yozing...'
-							className='h-10 flex-1 rounded-2xl border-border/50 bg-muted/50 text-sm placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-primary/40'
+							className='h-12 flex-1 rounded-2xl border-border/30 bg-background/80 backdrop-blur-sm text-base placeholder:text-muted-foreground/60 shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/50 transition-all duration-200 px-4 py-3'
 							onKeyDown={e => {
 								if (e.key === 'Enter' && !e.shiftKey) {
 									e.preventDefault()

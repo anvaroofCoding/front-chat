@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/popover'
 import {
 	useAddMembersMutation,
+	useEditGroupMutation,
 	useGetConversationsQuery,
 	useGetUsersQuery,
 } from '@/store/api'
@@ -95,19 +96,23 @@ function resolveUserAvatar(user) {
 
 const MoreVenticalInformation = ({
 	isGroup,
-	onAddMembers,
 	onEditGroup,
 	onViewMembers,
 	onDeleteGroup,
 	onClearHistory,
 }) => {
+	const [editGroup, setEditGroup] = useState(false)
 	const [about, setAbout] = useState(false)
 	const [members, setMembers] = useState(false)
 	const [selectedMemberIds, setSelectedMemberIds] = useState([])
+	const [editName, setEditName] = useState('')
+	const [editDescription, setEditDescription] = useState('')
+	const [editAvatar, setEditAvatar] = useState(null)
 	const { chatId } = useParams()
 	const { data: conversation } = useGetConversationsQuery(chatId)
 	const [query, setQuery] = useState('')
 	const [addMembers, { isLoading: isAddingMembers }] = useAddMembersMutation()
+	const [editGroups, { isLoading: isEditingGroup }] = useEditGroupMutation()
 	const ownerIdLocale = localStorage.getItem('userId') || ''
 
 	const groupData = conversation?.groupId || {}
@@ -178,7 +183,25 @@ const MoreVenticalInformation = ({
 		setQuery('')
 	}
 
-	console.log(groupData)
+	const handleEditSubmit = async () => {
+		try {
+			await editGroups({ chatData: { name: editName, description: editDescription, avatar: editAvatar }, id: groupData._id }).unwrap()
+			toast.success('Guruh muvaffaqiyatli tahrirlandi')
+			setEditGroup(false)
+		} catch (error) {
+			console.log(error)
+		}
+	}
+
+	const handleEditDialogOpen = (open) => {
+		if (open) {
+			setEditName(groupName)
+			setEditDescription(groupDescription)
+			setEditAvatar(null)
+		}
+		setEditGroup(open)
+	}
+
 
 	return (
 		<>
@@ -217,10 +240,14 @@ const MoreVenticalInformation = ({
 						</button>
 					) : null}
 
-					<button type='button' className={baseItemClass} onClick={onEditGroup}>
-						<PencilLine className='size-4 text-muted-foreground' />
-						<span>Guruhni tahrirlash</span>
-					</button>
+
+
+					{groupOwnerId._id === ownerIdLocale ? (
+						<button type='button' className={baseItemClass} onClick={() => handleEditDialogOpen(true)}>
+							<PencilLine className='size-4 text-muted-foreground' />
+							<span>Guruhni tahrirlash</span>
+						</button>
+					) : null}
 
 					<button
 						type='button'
@@ -396,13 +423,12 @@ const MoreVenticalInformation = ({
 												type='button'
 												onClick={() => handleToggle(userId)}
 												disabled={alreadyInGroup}
-												className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${
-													alreadyInGroup
-														? 'cursor-not-allowed border-border/40 bg-muted/30 opacity-60'
-														: selected
-															? 'border-primary/40 bg-primary/5 hover:bg-primary/10'
-															: 'border-border/50 bg-background hover:bg-accent/40'
-												}`}
+												className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${alreadyInGroup
+													? 'cursor-not-allowed border-border/40 bg-muted/30 opacity-60'
+													: selected
+														? 'border-primary/40 bg-primary/5 hover:bg-primary/10'
+														: 'border-border/50 bg-background hover:bg-accent/40'
+													}`}
 											>
 												{/* Avatar */}
 												<div className='relative shrink-0'>
@@ -415,11 +441,10 @@ const MoreVenticalInformation = ({
 														</AvatarFallback>
 													</Avatar>
 													<span
-														className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background ${
-															user?.isOnline
-																? 'bg-emerald-500'
-																: 'bg-muted-foreground/40'
-														}`}
+														className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background ${user?.isOnline
+															? 'bg-emerald-500'
+															: 'bg-muted-foreground/40'
+															}`}
 													/>
 												</div>
 
@@ -479,6 +504,93 @@ const MoreVenticalInformation = ({
 										Saqlash
 									</Button>
 								</div>
+							</div>
+						</div>
+					)}
+				</DialogContent>
+			</Dialog>
+
+
+			{/* tahrirlash */}
+			<Dialog open={editGroup} onOpenChange={handleEditDialogOpen}>
+				<DialogContent className='sm:max-w-md' showCloseButton={false}>
+					<DialogHeader>
+						<DialogTitle>Guruhni tahrirlash</DialogTitle>
+						<DialogDescription>
+							Guruh ma&apos;lumotlarini yangilang.
+						</DialogDescription>
+					</DialogHeader>
+
+					{!isGroup ? (
+						<div className='rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm text-muted-foreground'>
+							Bu chat guruh emas.
+						</div>
+					) : (
+						<div className='space-y-4'>
+							{/* Name input */}
+							<div className='space-y-2'>
+								<label className='text-sm font-medium text-foreground'>
+									Nomi
+								</label>
+								<Input
+									value={editName}
+									onChange={(e) => setEditName(e.target.value)}
+									placeholder='Guruh nomini kiriting...'
+									className='w-full'
+								/>
+							</div>
+
+							{/* Description input */}
+							<div className='space-y-2'>
+								<label className='text-sm font-medium text-foreground'>
+									Tavsif
+								</label>
+								<textarea
+									value={editDescription}
+									onChange={(e) => setEditDescription(e.target.value)}
+									placeholder='Guruh tavsifini kiriting...'
+									className='w-full min-h-[80px] rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none'
+								/>
+							</div>
+
+							{/* Avatar input */}
+							<div className='space-y-2'>
+								<label className='text-sm font-medium text-foreground'>
+									Avatar
+								</label>
+								<Input
+									type='file'
+									accept='image/*'
+									onChange={(e) => setEditAvatar(e.target.files[0])}
+									className='w-full'
+								/>
+								{editAvatar && (
+									<p className='text-xs text-muted-foreground'>
+										Tanlangan fayl: {editAvatar.name}
+									</p>
+								)}
+							</div>
+
+							{/* Action buttons */}
+							<div className='flex items-center justify-end gap-2 pt-2 border-t border-border/60'>
+								<Button
+									type='button'
+									variant='outline'
+									size='sm'
+									onClick={() => setEditGroup(false)}
+									className='rounded-lg'
+								>
+									Bekor qilish
+								</Button>
+								<Button
+									type='button'
+									size='sm'
+									onClick={handleEditSubmit}
+									className='rounded-lg'
+								>
+									<Save className='mr-1.5 size-3.5' />
+									Saqlash
+								</Button>
 							</div>
 						</div>
 					)}
